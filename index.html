@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALI KEBAB Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ===== Login Screen ===== -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-card">
+            <div class="login-logo">ALI KEBABBARO</div>
+            <h1>Pannello Proprietario</h1>
+            <p class="login-subtitle">Accedi per gestire gli ordini in arrivo</p>
+
+            <div id="login-error" class="login-error hidden"></div>
+
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="login-email">Username</label>
+                    <input type="text" id="login-email" class="form-input" autocomplete="username" required placeholder="Username">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" class="form-input" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Accedi</button>
+            </form>
+
+            <p class="login-hint">
+                Hai bisogno di un account proprietario? Crealo in Supabase Auth
+                (Autenticazione &gt; Utenti &gt; Aggiungi utente, ruolo: proprietario).
+            </p>
+        </div>
+    </div>
+
+    <!-- ===== Dashboard ===== -->
+    <div id="dashboard" class="dashboard hidden">
+        <header class="topbar">
+            <div class="topbar-brand">
+                <div class="logo">ALI KEBABBARO</div>
+                <div class="topbar-title">Pannello Proprietario</div>
+            </div>
+            <div class="topbar-actions">
+                <button id="refresh-btn" class="btn btn-ghost btn-sm" title="Aggiorna orders now">
+                    ↻ Aggiorna
+                </button>
+                <button id="signout-btn" class="btn btn-ghost btn-sm">Esci</button>
+            </div>
+        </header>
+
+        <div class="dashboard-body">
+            <!-- ===== Stats ===== -->
+            <section class="stats-grid" id="stats-grid">
+                <div class="stat-card stat-new">
+                    <div class="stat-label">Nuovi</div>
+                    <div class="stat-value" id="stat-new">0</div>
+                </div>
+                <div class="stat-card stat-accepted">
+                    <div class="stat-label">Accettati</div>
+                    <div class="stat-value" id="stat-accepted">0</div>
+                </div>
+                <div class="stat-card stat-rejected">
+                    <div class="stat-label">Rifiutati</div>
+                    <div class="stat-value" id="stat-rejected">0</div>
+                </div>
+                <div class="stat-card stat-completed">
+                    <div class="stat-label">Completati</div>
+                    <div class="stat-value" id="stat-completed">0</div>
+                </div>
+            </section>
+
+            <!-- ===== Filters ===== -->
+            <div class="filter-bar">
+                <div class="filter-tabs" id="filter-tabs">
+                    <button class="filter-tab active" data-status="all">Tutti gli stati</button>
+                    <button class="filter-tab" data-status="new">Nuovi</button>
+                    <button class="filter-tab" data-status="accepted">In preparazione</button>
+                    <button class="filter-tab" data-status="completed">Completati</button>
+                    <button class="filter-tab" data-status="rejected">Annullati</button>
+                </div>
+                <div class="filter-controls" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <select id="date-filter" class="form-input">
+                      <option value="today" selected>Oggi</option>
+                      <option value="yesterday">Ieri</option>
+                      <option value="7d">Ultimi 7 giorni</option>
+                      <option value="30d">Ultimi 30 giorni</option>
+                      <option value="month">Questo mese</option>
+                      <option value="lastmonth">Mese scorso</option>
+                      <option value="custom">Intervallo personalizzato</option>
+                      <option value="all">Tutti gli ordini</option>
+                    </select>
+                    <input type="text" id="search-input" class="form-input" placeholder="Cerca nome, telefono o ordine #...">
+                    <button id="reset-filters" class="btn btn-ghost btn-sm">Reimposta</button>
+                </div>
+                <div id="result-count" style="color:var(--muted);font-size:13px;"></div>
+            </div>
+
+            <!-- ===== Order List + Custom Range Panel ===== -->
+            <div class="orders-layout">
+              <main class="order-list" id="order-list">
+                  <div class="empty-state" id="empty-state">
+                      <div class="empty-icon">📋</div>
+                      <p id="empty-text">Nessun ordine da visualizzare.</p>
+                  </div>
+              </main>
+              <aside id="custom-panel" class="custom-panel hidden">
+                <h3>Intervallo personalizzato</h3>
+                <label>Da</label>
+                <input type="date" id="date-from" class="form-input">
+                <label>A</label>
+                <input type="date" id="date-to" class="form-input">
+                <div id="selected-range" class="selected-range"></div>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                  <button id="apply-range" class="btn btn-primary btn-sm">Applica filtri</button>
+                  <button id="cancel-range" class="btn btn-ghost btn-sm">Annulla</button>
+                </div>
+              </aside>
+            </div>
+        </div>
+
+        <!-- ===== Status Update Modal ===== -->
+        <div id="status-modal" class="modal hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Aggiorna stato ordine</h3>
+                    <button class="modal-close" id="status-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="status-order-info">Order #1234</p>
+                    <div class="status-actions">
+                        <button class="btn btn-success" data-status="accepted">Accetta</button>
+                        <button class="btn btn-danger" data-status="rejected">Rifiuta</button>
+                        <button class="btn btn-primary" data-status="completed">Mark Completati</button>
+                        <button class="btn btn-ghost" data-status="new">Reset to Nuovi</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" id="status-cancel">Chiudi</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Toast ===== -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="dashboard.js?v=7"></script>
+</body>
+</html>
