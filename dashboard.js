@@ -1,5 +1,5 @@
 const SESSION_KEY = 'forno99_session';
-const API = '/api/orders';
+const API = (window.API_BASE||'') + '/api/orders';
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
     if (r.status === 401 && !String(url).includes('/api/login')) {
@@ -175,7 +175,7 @@ els.loginForm.addEventListener('submit', e => {
   e.preventDefault();
   const user = document.getElementById('login-email').value.trim();
   const pass = document.getElementById('login-password').value;
-  fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:user,password:pass})}).then(r=>{
+  fetch((window.API_BASE||'') + '/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:user,password:pass})}).then(r=>{
     if(!r.ok) throw new Error('bad');
     return r.json();
   }).then(d=>{
@@ -192,7 +192,7 @@ els.loginForm.addEventListener('submit', e => {
 
 els.signoutBtn.addEventListener('click', () => {
   const t = sessionStorage.getItem('forno99_token');
-  fetch('/api/logout', {method:'POST', headers:{'Authorization':'Bearer '+t}}).finally(()=>{
+  fetch((window.API_BASE||'') + '/api/logout', {method:'POST', headers:{'Authorization':'Bearer '+t}}).finally(()=>{
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem('forno99_token');
     showLogin();
