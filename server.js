@@ -77,12 +77,26 @@ const server = http.createServer((req,res)=>{
   if (pathname === '/api/orders' && req.method === 'GET') {
     if (!auth(req,res)) return;
     res.setHeader('Content-Type','application/json');
-    const origin = req.headers.origin; const allowed=(process.env.ALLOWED_ORIGINS||'http://localhost:3000').split(',').map(x=>x.trim()); if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+    const origin = req.headers.origin;
+    const allowed = [
+      'http://localhost:3000',
+      ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+      process.env.CUSTOMER_FRONTEND_URL,
+      process.env.OWNER_FRONTEND_URL
+    ].map(x => x && x.trim()).filter(Boolean);
+    if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
     return res.end(JSON.stringify(readOrders()));
   }
   if (pathname === '/api/orders' && req.method === 'POST') {
     res.setHeader('Content-Type','application/json');
-    const origin = req.headers.origin; const allowed=(process.env.ALLOWED_ORIGINS||'http://localhost:3000').split(',').map(x=>x.trim()); if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+    const origin = req.headers.origin;
+    const allowed = [
+      'http://localhost:3000',
+      ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+      process.env.CUSTOMER_FRONTEND_URL,
+      process.env.OWNER_FRONTEND_URL
+    ].map(x => x && x.trim()).filter(Boolean);
+    if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
     // customer order submission remains open
     let body=''; let tooBig=false; req.on('data',c=>{ if (tooBig) return; body+=c; if (body.length > 1e6) { tooBig=true; } }); req.on('end',()=>{ if (tooBig) { res.statusCode=413; res.end('Payload too large'); return; }
       let order;
@@ -123,13 +137,27 @@ const server = http.createServer((req,res)=>{
       if (o) o.status = status;
       writeOrders(orders);
       res.setHeader('Content-Type','application/json');
-      const origin = req.headers.origin; const allowed=(process.env.ALLOWED_ORIGINS||'http://localhost:3000').split(',').map(x=>x.trim()); if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+      const origin = req.headers.origin;
+    const allowed = [
+      'http://localhost:3000',
+      ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+      process.env.CUSTOMER_FRONTEND_URL,
+      process.env.OWNER_FRONTEND_URL
+    ].map(x => x && x.trim()).filter(Boolean);
+    if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
       res.end(JSON.stringify(o||{}));
     });
     return;
   }
   if (req.method === 'OPTIONS') {
-    const origin = req.headers.origin; const allowed=(process.env.ALLOWED_ORIGINS||'http://localhost:3000').split(',').map(x=>x.trim()); if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
+    const origin = req.headers.origin;
+    const allowed = [
+      'http://localhost:3000',
+      ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+      process.env.CUSTOMER_FRONTEND_URL,
+      process.env.OWNER_FRONTEND_URL
+    ].map(x => x && x.trim()).filter(Boolean);
+    if (allowed.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers','Content-Type');
     return res.end();
