@@ -124,14 +124,21 @@ async function printReceipt(order) {
     return;
   }
   try {
-    // 1. Request the Bluetooth device
-    const device = await navigator.bluetooth.requestDevice({
+    // 1. Try already-granted devices first
+    let device = null;
+    if (navigator.bluetooth.getDevices) {
+      const devices = await navigator.bluetooth.getDevices();
+      if (devices && devices.length) device = devices[0];
+    }
+    if (!device) {
+      device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: [
         '000018f0-0000-1000-8000-00805f9b34fb',
         '49535343-fe7d-41aa-a73b-222c547d4140'
       ]
-    });
+      });
+    }
 
     // 2. Connect to the GATT Server
     const server = await device.gatt.connect();
