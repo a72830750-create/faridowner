@@ -117,6 +117,7 @@ async function printReceipt(order) {
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
       <div>Grazie per il tuo ordine!</div>
       <div>Questo scontrino non ha valore fiscale.</div>
+      <div style="text-align:center;margin-top:8px"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=Via%20Lorenzo%20il%20Magnifico%2042%2C%20Poggio%20a%20Caiano%2C%20Tuscany%2C%20Italy" alt="QR"></div>
       <script>window.print();</script>
     </body></html>`);
     w.document.close();
