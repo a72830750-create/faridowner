@@ -122,6 +122,7 @@ async function printReceipt(order) {
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy</div>
       <div>${order.order_type}${order.delivery_address ? ' — ' + esc(order.delivery_address) : ''}</div>
+      <div class="line"></div>
       <table>${items}</table>
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
       <div>Questo scontrino non ha valore fiscale.</div>
