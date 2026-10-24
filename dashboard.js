@@ -108,7 +108,8 @@ async function printReceipt(order) {
     // Fallback to browser print dialog
     const items = (order.items || []).map(i => `<tr><td>${i.qty}x ${esc(i.name)}</td><td style="text-align:right">€${(i.qty*i.price).toFixed(2)}</td></tr>`).join('');
     const html = `<!DOCTYPE html><html><head><title>Receipt</title><style>
-      body{font-family:'Courier New',monospace;width:80mm;margin:0;padding:12px;color:#111}
+      @page{margin:0}
+      body{font-family:'Courier New',monospace;width:100%;margin:0;padding:8px;color:#111}
       h3{margin:0;font-size:20px;letter-spacing:1px}
       h4{margin:4px 0 8px;font-size:14px}
       .line{border-top:1px dashed #000;margin:8px 0}
