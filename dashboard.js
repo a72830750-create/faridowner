@@ -128,7 +128,7 @@ async function printReceipt(order) {
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
       <div>Questo scontrino non ha valore fiscale.</div>
       <div style="text-align:center;margin-top:8px"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://www.google.com/maps/search/?api=1&query=' + (order.delivery_address || ''))}" alt="QR"></div>
-      <div style="height:60px"></div>
+      <div style="height:140px"></div>
     </body></html>`;
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
