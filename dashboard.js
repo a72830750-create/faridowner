@@ -106,9 +106,8 @@ function getFiltered() {
 async function printReceipt(order) {
   if (!navigator.bluetooth) {
     // Fallback to browser print dialog
-    const w = window.open('', '_blank');
     const items = (order.items || []).map(i => `<tr><td>${i.qty}x ${esc(i.name)}</td><td style="text-align:right">€${(i.qty*i.price).toFixed(2)}</td></tr>`).join('');
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:monospace;width:80mm;margin:0;padding:8px}table{width:100%}td{padding:2px 0}.total{font-weight:bold;border-top:1px dashed #000;margin-top:4px;padding-top:4px}</style></head><body>
+    const html = `<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:monospace;width:80mm;margin:0;padding:8px}table{width:100%}td{padding:2px 0}.total{font-weight:bold;border-top:1px dashed #000;margin-top:4px;padding-top:4px}</style></head><body>
       <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy</div>
@@ -118,9 +117,21 @@ async function printReceipt(order) {
       <div>Grazie per il tuo ordine!</div>
       <div>Questo scontrino non ha valore fiscale.</div>
       <div style="text-align:center;margin-top:8px"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://www.google.com/maps/search/?api=1&query=' + (order.delivery_address || ''))}" alt="QR"></div>
-      <script>window.print();</script>
-    </body></html>`);
-    w.document.close();
+    </body></html>`;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    iframe.contentWindow.document.open();
+    iframe.contentWindow.document.write(html);
+    iframe.contentWindow.document.close();
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => document.body.removeChild(iframe), 1000);
     return;
   }
   try {
