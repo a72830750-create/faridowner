@@ -104,6 +104,21 @@ function getFiltered() {
 }
 
 async function printReceipt(order) {
+  if (!navigator.bluetooth) {
+    // Fallback to browser print dialog
+    const w = window.open('', '_blank');
+    const items = (order.items || []).map(i => `<tr><td>${i.qty}x ${esc(i.name)}</td><td style="text-align:right">€${(i.qty*i.price).toFixed(2)}</td></tr>`).join('');
+    w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:monospace;width:80mm;margin:0;padding:8px}table{width:100%}td{padding:2px 0}.total{font-weight:bold;border-top:1px dashed #000;margin-top:4px;padding-top:4px}</style></head><body>
+      <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
+      <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
+      <div>${order.order_type}${order.delivery_address ? ' — ' + esc(order.delivery_address) : ''}</div>
+      <table>${items}</table>
+      <div class="total">Total €${Number(order.total).toFixed(2)}</div>
+      <script>window.print();</script>
+    </body></html>`);
+    w.document.close();
+    return;
+  }
   try {
     // 1. Request the Bluetooth device
     const device = await navigator.bluetooth.requestDevice({
