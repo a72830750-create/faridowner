@@ -124,7 +124,6 @@ async function printReceipt(order) {
       <div>${order.order_type}${order.delivery_address ? ' — ' + esc(order.delivery_address) : ''}</div>
       <table>${items}</table>
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
-      <div>Grazie per il tuo ordine!</div>
       <div>Questo scontrino non ha valore fiscale.</div>
       <div style="text-align:center;margin-top:8px"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://www.google.com/maps/search/?api=1&query=' + (order.delivery_address || ''))}" alt="QR"></div>
     </body></html>`;
@@ -189,7 +188,6 @@ async function printReceipt(order) {
         Array.from(new TextEncoder().encode(`${item.qty}x ${item.name} - €${item.price}\n`))
       ),
       ...new TextEncoder().encode("--------------------------------\n"),
-      ...new TextEncoder().encode("Grazie per il tuo ordine!\n"),
       ...new TextEncoder().encode("Questo scontrino non ha valore fiscale.\n\n\n"),
       0x1D, 0x56, 0x42, 0x00                   // Cut Paper
     ]);
