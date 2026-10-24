@@ -121,8 +121,8 @@ async function printReceipt(order) {
     </style></head><body>
       <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
-      <div>Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy</div>
-      <div>${order.order_type}${order.delivery_address ? ' — ' + esc(order.delivery_address) : ''}</div>
+      ${order.delivery_address ? order.delivery_address.split(',').map(p=>`<div>${esc(p.trim())}</div>`).join('') : ''}
+      <div>${order.order_type}</div>
       ${order.notes ? `<div class="line"></div><div>Note: ${esc(order.notes)}</div>` : ''}
       <div class="line"></div>
       <table>${items}</table>
