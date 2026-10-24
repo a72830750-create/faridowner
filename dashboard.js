@@ -107,7 +107,17 @@ async function printReceipt(order) {
   if (!navigator.bluetooth) {
     // Fallback to browser print dialog
     const items = (order.items || []).map(i => `<tr><td>${i.qty}x ${esc(i.name)}</td><td style="text-align:right">€${(i.qty*i.price).toFixed(2)}</td></tr>`).join('');
-    const html = `<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:monospace;width:80mm;margin:0;padding:8px}table{width:100%}td{padding:2px 0}.total{font-weight:bold;border-top:1px dashed #000;margin-top:4px;padding-top:4px}</style></head><body>
+    const html = `<!DOCTYPE html><html><head><title>Receipt</title><style>
+      body{font-family:'Courier New',monospace;width:80mm;margin:0;padding:12px;color:#111}
+      h3{margin:0;font-size:20px;letter-spacing:1px}
+      h4{margin:4px 0 8px;font-size:14px}
+      .line{border-top:1px dashed #000;margin:8px 0}
+      table{width:100%;border-collapse:collapse}
+      td{padding:3px 0;font-size:13px}
+      .total{font-weight:bold;font-size:16px;margin-top:8px;padding-top:8px;border-top:2px solid #000}
+      .center{text-align:center}
+      .muted{font-size:11px;color:#555}
+    </style></head><body>
       <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy</div>
