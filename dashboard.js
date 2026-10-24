@@ -111,9 +111,12 @@ async function printReceipt(order) {
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:monospace;width:80mm;margin:0;padding:8px}table{width:100%}td{padding:2px 0}.total{font-weight:bold;border-top:1px dashed #000;margin-top:4px;padding-top:4px}</style></head><body>
       <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
+      <div>Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy</div>
       <div>${order.order_type}${order.delivery_address ? ' — ' + esc(order.delivery_address) : ''}</div>
       <table>${items}</table>
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
+      <div>Grazie per il tuo ordine!</div>
+      <div>Questo scontrino non ha valore fiscale.</div>
       <script>window.print();</script>
     </body></html>`);
     w.document.close();
@@ -151,11 +154,14 @@ async function printReceipt(order) {
       ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
       ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
       ...new TextEncoder().encode(`Name: ${order.customer_name}\n`),
+      ...new TextEncoder().encode("Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy\n"),
       ...new TextEncoder().encode("--------------------------------\n"),
       ...order.items.flatMap(item => 
         Array.from(new TextEncoder().encode(`${item.qty}x ${item.name} - €${item.price}\n`))
       ),
-      ...new TextEncoder().encode("--------------------------------\n\n\n"),
+      ...new TextEncoder().encode("--------------------------------\n"),
+      ...new TextEncoder().encode("Grazie per il tuo ordine!\n"),
+      ...new TextEncoder().encode("Questo scontrino non ha valore fiscale.\n\n\n"),
       0x1D, 0x56, 0x42, 0x00                   // Cut Paper
     ]);
 
