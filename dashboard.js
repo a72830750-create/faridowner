@@ -356,7 +356,7 @@ if (els.resetBtn) els.resetBtn.addEventListener('click', () => {
 els.orderList.addEventListener('click', e => {
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
-  const id = Number(btn.dataset.id);
+  const id = btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'status') {
     selectedOrder = orders.find(x => x.id === id);
@@ -392,4 +392,4 @@ setInterval(() => {
   }
 }, 5000);
 
-initAuth();
+initAuth(); 
