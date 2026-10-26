@@ -125,6 +125,7 @@ async function printReceipt(order) {
       ${order.delivery_address ? order.delivery_address.split(',').map(p=>`<div>${esc(p.trim())}</div>`).join('') : ''}
       <div>${order.order_type}</div>
       <div>Delivery: ${order.delivery_timing === 'later' ? esc(order.delivery_time) : 'Now'}</div>
+      ${order.pickup_time ? `<div>Pickup: ${esc(order.pickup_time)}</div>` : ''}
       ${order.notes ? `<div class="line"></div><div>Note: ${esc(order.notes)}</div>` : ''}
       <div class="line"></div>
       <table>${items}</table>
@@ -189,6 +190,7 @@ async function printReceipt(order) {
       ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
       ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
       ...new TextEncoder().encode(`Delivery: ${order.delivery_timing === 'later' ? order.delivery_time : 'Now'}\n`),
+      ...(order.pickup_time ? [ ...new TextEncoder().encode(`Pickup: ${order.pickup_time}\n`) ] : []),
       ...new TextEncoder().encode(`Name: ${order.customer_name}\n`),
       ...new TextEncoder().encode("Via Leopoldo Galeotti, 51017 Pescia PT\n"),
       ...new TextEncoder().encode("--------------------------------\n"),
