@@ -398,4 +398,9 @@ setInterval(() => {
   }
 }, 5000);
 
+
+// Toggle accepting orders
+const toggleBtn=document.createElement("button");toggleBtn.textContent="Toggle Orders";toggleBtn.className="btn btn-ghost btn-sm";toggleBtn.style.position="fixed";toggleBtn.style.bottom="20px";toggleBtn.style.right="20px";toggleBtn.style.zIndex="9999";document.body.appendChild(toggleBtn);
+toggleBtn.addEventListener("click",async()=>{const t=sessionStorage.getItem("forno99_token");const r=await fetch((window.API_BASE||"")+"/api/settings",{headers:{Authorization:"Bearer "+t}});const d=await r.json();const next=d.accepting_orders==="false"?"true":"false";await fetch((window.API_BASE||"")+"/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({key:"accepting_orders",value:next})});alert("Orders "+(next==="true"?"ON":"OFF"));});
+
 initAuth();
