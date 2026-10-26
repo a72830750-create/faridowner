@@ -252,7 +252,7 @@ function renderOrders() {
           <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Update</button>
           <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Print</button>
           ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accept</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Reject</button>` : ''}
-          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="complete" data-id="${o.id}">Complete</button>` : ''}
+          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="complete" data-id="${o.id}">${o.order_type === 'pickup' ? 'Ready for pickup' : 'Delivered'}</button>` : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
