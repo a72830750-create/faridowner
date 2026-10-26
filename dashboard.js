@@ -240,6 +240,8 @@ function renderOrders() {
         <span>📞 ${esc(o.customer_phone)}</span>
         <span>🚚 ${o.order_type}</span>
         ${o.delivery_address ? `<span>📍 ${esc(o.delivery_address)}</span>` : ''}
+        ${o.delivery_timing ? `<span>⏱ Delivery: ${esc(o.delivery_timing === 'later' ? (o.delivery_time || '') : 'Now')}</span>` : ''}
+        ${o.pickup_time ? `<span>⏱ Pickup: ${esc(o.pickup_time)}</span>` : ''}
         <span>⏱ ${timeAgo(o.created_at)}</span>
       </div>
       ${o.notes ? `<div class="order-meta"><span>📝 ${esc(o.notes)}</span></div>` : ''}
