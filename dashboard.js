@@ -119,8 +119,9 @@ async function printReceipt(order) {
       .center{text-align:center}
       .muted{font-size:11px;color:#555}
     </style></head><body>
-      <h3>ALI KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
+      <h3>FARID KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
+      <div>Via Leopoldo Galeotti, 51017 Pescia PT</div>
       ${order.delivery_address ? order.delivery_address.split(',').map(p=>`<div>${esc(p.trim())}</div>`).join('') : ''}
       <div>${order.order_type}</div>
       <div>Delivery: ${order.delivery_timing === 'later' ? esc(order.delivery_time) : 'Now'}</div>
@@ -183,13 +184,13 @@ async function printReceipt(order) {
     const escposData = new Uint8Array([
       0x1B, 0x40,                             // Initialize
       0x1B, 0x61, 0x01,                       // Center Align
-      ...new TextEncoder().encode("ALI KEBAB\n\n"),
+      ...new TextEncoder().encode("FARID KEBAB\n\n"),
       0x1B, 0x61, 0x00,                       // Left Align
       ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
       ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
       ...new TextEncoder().encode(`Delivery: ${order.delivery_timing === 'later' ? order.delivery_time : 'Now'}\n`),
       ...new TextEncoder().encode(`Name: ${order.customer_name}\n`),
-      ...new TextEncoder().encode("Via Lorenzo il Magnifico 42, Poggio a Caiano, Tuscany, Italy\n"),
+      ...new TextEncoder().encode("Via Leopoldo Galeotti, 51017 Pescia PT\n"),
       ...new TextEncoder().encode("--------------------------------\n"),
       ...order.items.flatMap(item => 
         Array.from(new TextEncoder().encode(`${item.qty}x ${item.name} - €${item.price}\n`))
