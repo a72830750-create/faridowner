@@ -59,7 +59,7 @@ async function loadOrders() { const t = sessionStorage.getItem('forno99_token');
 function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
 
 function renderStats() {
-  const c = { new: 0, accepted: 0, rejected: 0, completed: 0 };
+  const c = { new: 0, accepted: 0, preparing: 0, ready: 0, out_for_delivery: 0, rejected: 0, completed: 0 };
   orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; });
   document.getElementById('stat-new').textContent = c.new;
   document.getElementById('stat-accepted').textContent = c.accepted;
@@ -252,7 +252,9 @@ function renderOrders() {
           <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Update</button>
           <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Print</button>
           ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accept</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Reject</button>` : ''}
-          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="complete" data-id="${o.id}">${o.order_type === 'pickup' ? 'Ready for pickup' : 'Delivered'}</button>` : ''}
+          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">Preparing</button>` : ''}
+          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}">${o.order_type === 'pickup' ? 'Ready for pickup' : 'Out for delivery'}</button>` : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Complete</button>` : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
@@ -370,6 +372,8 @@ els.orderList.addEventListener('click', e => {
     els.statusModal.classList.remove('hidden');
   } else if (action === 'accept') setStatus(id, 'accepted');
   else if (action === 'reject') setStatus(id, 'rejected');
+  else if (action === 'preparing') setStatus(id, 'preparing');
+  else if (action === 'ready') setStatus(id, o.order_type === 'pickup' ? 'ready' : 'out_for_delivery');
   else if (action === 'complete') setStatus(id, 'completed');
   else if (action === 'print') { const o = orders.find(x => x.id === id); if (o) printReceipt(o); }
 });
