@@ -122,7 +122,6 @@ async function printReceipt(order) {
       <h3>FARID KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Leopoldo Galeotti, 51017 Pescia PT</div>
-      ${order.delivery_address ? order.delivery_address.split(',').map(p=>`<div>${esc(p.trim())}</div>`).join('') : ''}
       <div>${order.order_type}</div>
       <div>Delivery: ${order.delivery_timing === 'later' ? esc(order.delivery_time) : 'Now'}</div>
       ${order.pickup_time ? `<div>Pickup: ${esc(order.pickup_time)}</div>` : ''}
