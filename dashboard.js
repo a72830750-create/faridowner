@@ -147,14 +147,12 @@ async function printReceipt(order) {
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Leopoldo Galeotti, 51017 Pescia PT</div>
       <div>${order.order_type}</div>
-      ${order.order_type === 'delivery' ? `<div>Delivery: ${order.delivery_timing === 'later' ? esc(order.delivery_time) : 'Now'}</div>` : ''}
       ${order.order_type === 'pickup' && order.pickup_time ? `<div style="font-size:24px;font-weight:900">Pickup: ${esc(order.pickup_time)}</div>` : ''}
       ${order.notes ? `<div class="line"></div><div>Note: ${esc(order.notes)}</div>` : ''}
       <div class="line"></div>
       <table>${items}</table>
       <div class="total">Total €${Number(order.total).toFixed(2)}</div>
       <div>Questo scontrino non ha valore fiscale.</div>
-      ${order.order_type === 'delivery' ? `<div style="text-align:center;margin-top:8px"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://www.google.com/maps/search/?api=1&query=' + (order.delivery_address || ''))}" alt="QR"></div>` : ''}
       <div class="muted" style="font-weight:900">Servizio non incluso. Conservare lo scontrino.</div>
       <div style="height:140px"></div>
     </body></html>`;
@@ -212,7 +210,6 @@ async function printReceipt(order) {
       0x1B, 0x61, 0x00,                       // Left Align
       ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
       ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
-      ...(order.order_type === 'delivery' ? [ ...new TextEncoder().encode(`Delivery: ${order.delivery_timing === 'later' ? order.delivery_time : 'Now'}\n`) ] : []),
       ...(order.order_type === 'pickup' && order.pickup_time ? [ ...new TextEncoder().encode(`Pickup: ${order.pickup_time}\n`) ] : []),
       ...new TextEncoder().encode(`Name: ${order.customer_name}\n`),
       ...new TextEncoder().encode("Via Leopoldo Galeotti, 51017 Pescia PT\n"),
