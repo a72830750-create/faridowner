@@ -281,7 +281,16 @@ function initAuth() {
 }
 
 let knownIds = new Set();
-function playBeep() { try { const Ctx = window.AudioContext||window.webkitAudioContext; if(!Ctx) return; const ctx = new Ctx(); if(ctx.state==='suspended') ctx.resume(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=1046; g.gain.setValueAtTime(0.4, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5); o.start(ctx.currentTime); o.stop(ctx.currentTime+0.5); setTimeout(()=>ctx.close(),700); } catch(e){ console.error('beep',e); } }
+function playBeep() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=900; g.gain.setValueAtTime(0.3, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.2); o.start(ctx.currentTime); o.stop(ctx.currentTime+0.2); } catch(e){ console.error('beep',e); } }
+let audioCtx = null;
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ audioCtx=null; }
+  return audioCtx;
+}
+document.addEventListener('click', ensureAudio, {once:false});
+document.addEventListener('keydown', ensureAudio, {once:false});
+
 function loadAndRender() {
   loadOrders().then(o => {
     const newOnes = o.filter(x => !knownIds.has(x.id));
