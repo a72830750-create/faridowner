@@ -166,7 +166,7 @@ const server = http.createServer((req,res)=>{
   // Static
   let filePath;
   if (pathname.startsWith('/customer/')) filePath = path.join('/Users/jamesjackson/pizzaspc', pathname.replace('/customer/',''));
-  else if (pathname.startsWith('/owner/')) filePath = path.join('/Users/jamesjackson/alikebab-owner', pathname.replace('/owner/',''));
+  else if (pathname.startsWith('/owner/')) filePath = path.join('/Users/jamesjackson/forno99-owner', pathname.replace('/owner/',''));
   else if (pathname === '/') filePath = path.join(__dirname, 'index.html');
   else filePath = path.join(ROOT, pathname);
 
