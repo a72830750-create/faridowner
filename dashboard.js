@@ -281,7 +281,7 @@ function initAuth() {
 }
 
 let knownIds = new Set();
-function playBeep() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=900; g.gain.setValueAtTime(0.3, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.2); o.start(ctx.currentTime); o.stop(ctx.currentTime+0.2); } catch(e){ console.error('beep',e); } }
+function playAlarm() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); [0,0.25,0.5].forEach((t)=>{ const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='square'; o.frequency.value=950; g.gain.setValueAtTime(0.35, ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+t+0.18); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.18); }); } catch(e){ console.error('alarm',e); } }
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
@@ -294,7 +294,7 @@ document.addEventListener('keydown', ensureAudio, {once:false});
 function loadAndRender() {
   loadOrders().then(o => {
     const newOnes = o.filter(x => !knownIds.has(x.id));
-    if (knownIds.size && newOnes.length) { playBeep(); showToast(newOnes.length + ' nuovo/i ordine/i'); }
+    if (knownIds.size && newOnes.length) { playAlarm(); showToast(newOnes.length + ' nuovo/i ordine/i'); }
     o.forEach(x => knownIds.add(x.id));
     orders = o; renderStats(); renderOrders();
   }).catch(() => showToast('Errore caricamento ordini'));
