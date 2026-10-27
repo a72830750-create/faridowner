@@ -383,6 +383,9 @@ function loadAndRender() {
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders(); renderEarnings();
+    const firstNew = o.find(x=>x.status==='new');
+    if (firstNew && !document.getElementById('status-modal').classList.contains('hidden')===false) {}
+    if (firstNew) { selectedOrder = firstNew; els.statusOrderInfo.textContent = firstNew.order_number + ' — ' + firstNew.customer_name; els.statusModal.classList.remove('hidden'); }
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
