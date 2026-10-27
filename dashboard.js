@@ -373,7 +373,7 @@ els.orderList.addEventListener('click', e => {
   } else if (action === 'accept') setStatus(id, 'accepted');
   else if (action === 'reject') setStatus(id, 'rejected');
   else if (action === 'preparing') setStatus(id, 'preparing');
-  else if (action === 'ready') setStatus(id, o.order_type === 'pickup' ? 'ready' : 'completed');
+  else if (action === 'ready') { const oo = orders.find(x => x.id === id); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery'); }
   else if (action === 'complete') setStatus(id, 'completed');
   else if (action === 'print') { const o = orders.find(x => x.id === id); if (o) printReceipt(o); }
 });
