@@ -281,6 +281,8 @@ function initAuth() {
 }
 
 let knownIds = new Set();
+let unacceptedNew = new Set();
+let alarmTimer = null;
 function playAlarm() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); [0,0.25,0.5].forEach((t)=>{ const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='square'; o.frequency.value=950; g.gain.setValueAtTime(0.35, ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+t+0.18); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.18); }); } catch(e){ console.error('alarm',e); } }
 let audioCtx = null;
 function ensureAudio() {
@@ -294,8 +296,15 @@ document.addEventListener('keydown', ensureAudio, {once:false});
 function loadAndRender() {
   loadOrders().then(o => {
     const newOnes = o.filter(x => !knownIds.has(x.id));
-    if (knownIds.size && newOnes.length) { playAlarm(); showToast(newOnes.length + ' nuovo/i ordine/i'); }
+    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i'); }
     o.forEach(x => knownIds.add(x.id));
+    // track unaccepted new orders
+    unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
+    if (unacceptedNew.size && !alarmTimer) {
+      playAlarm();
+      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 2500);
+    }
+    if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders();
   }).catch(() => showToast('Errore caricamento ordini'));
 }
