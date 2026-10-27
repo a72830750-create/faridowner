@@ -78,6 +78,7 @@ function timeAgo(iso) {
 function getFiltered() {
   const now = rome(new Date());
   return orders.filter(o => {
+    if (currentStatus === 'all' && (o.status === 'completed' || o.status === 'rejected')) return false;
     if (currentStatus !== 'all' && o.status !== currentStatus) return false;
     const od = rome(new Date(o.created_at));
     if (dateFilter === 'today' && startOfDay(od).getTime() !== startOfDay(now).getTime()) return false;
