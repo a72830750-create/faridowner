@@ -383,9 +383,13 @@ function loadAndRender() {
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders(); renderEarnings();
-    const firstNew = o.find(x=>x.status==='new');
-    if (firstNew && !document.getElementById('status-modal').classList.contains('hidden')===false) {}
-    if (firstNew) { selectedOrder = firstNew; els.statusOrderInfo.textContent = firstNew.order_number + ' — ' + firstNew.customer_name + '\n' + firstNew.order_type + ' — ' + (firstNew.delivery_address||'') + '\nNote: ' + (firstNew.notes||'') + '\n' + (firstNew.items||[]).map(function(i){return i.qty+'x '+i.name+' €'+(i.qty*i.price).toFixed(2);}).join('\n') + '\nTotale: €' + Number(firstNew.total).toFixed(2); els.statusModal.classList.remove('hidden'); }
+    const newOnes = o.filter(x => !knownIds.has(x.id) && x.status==='new');
+    if (newOnes.length) {
+      const firstNew = newOnes[0];
+      selectedOrder = firstNew;
+      els.statusOrderInfo.textContent = firstNew.order_number + ' — ' + firstNew.customer_name + '\n' + firstNew.order_type + ' — ' + (firstNew.delivery_address||'') + '\nNote: ' + (firstNew.notes||'') + '\n' + (firstNew.items||[]).map(function(i){return i.qty+'x '+i.name+' €'+(i.qty*i.price).toFixed(2);}).join('\n') + '\nTotale: €' + Number(firstNew.total).toFixed(2);
+      els.statusModal.classList.remove('hidden');
+    }
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
