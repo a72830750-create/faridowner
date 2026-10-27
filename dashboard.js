@@ -58,11 +58,28 @@ function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x
 async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
 function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
 
-function isToday(o) { return startOfDay(rome(new Date(o.created_at))).getTime() === startOfDay(rome(new Date())).getTime(); }
+function matchesDate(o) {
+  const now = rome(new Date());
+  const od = rome(new Date(o.created_at));
+  if (dateFilter === 'today' && startOfDay(od).getTime() !== startOfDay(now).getTime()) return false;
+  if (dateFilter === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); if (startOfDay(od).getTime() !== startOfDay(y).getTime()) return false; }
+  if (dateFilter === '7d') { const t = new Date(now); t.setDate(t.getDate() - 7); if (od < t) return false; }
+  if (dateFilter === '30d') { const t = new Date(now); t.setDate(t.getDate() - 30); if (od < t) return false; }
+  if (dateFilter === 'month') { if (od.getMonth() !== now.getMonth() || od.getFullYear() !== now.getFullYear()) return false; }
+  if (dateFilter === 'lastmonth') { const lm = new Date(now); lm.setMonth(lm.getMonth() - 1); if (od.getMonth() !== lm.getMonth() || od.getFullYear() !== lm.getFullYear()) return false; }
+  if (dateFilter === 'custom') {
+    if (els.dateFrom.value) { const from = new Date(els.dateFrom.value + 'T00:00:00'); if (od < from) return false; }
+    if (els.dateTo.value) { const to = new Date(els.dateTo.value + 'T23:59:59'); if (od > to) return false; }
+  }
+  return true;
+}
 function renderStats() {
   const c = { new: 0, accepted: 0, preparing: 0, ready: 0, out_for_delivery: 0, rejected: 0, completed: 0 };
-  let revenue = 0, completedToday = 0;
-  orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; if (o.status === 'completed' && isToday(o)) { revenue += Number(o.total) || 0; completedToday++; } });
+  let revenue = 0, completedCount = 0;
+  orders.forEach(o => {
+    if (c[o.status] !== undefined) c[o.status]++;
+    if (o.status === 'completed' && matchesDate(o)) { revenue += Number(o.total) || 0; completedCount++; }
+  });
   document.getElementById('stat-new').textContent = c.new;
   document.getElementById('stat-accepted').textContent = c.accepted;
   document.getElementById('stat-rejected').textContent = c.rejected;
@@ -70,7 +87,7 @@ function renderStats() {
   const revEl = document.getElementById('stat-revenue');
   if (revEl) revEl.textContent = '€' + revenue.toFixed(2);
   const avgEl = document.getElementById('stat-avg');
-  if (avgEl) avgEl.textContent = '€' + (completedToday ? (revenue / completedToday).toFixed(2) : '0.00');
+  if (avgEl) avgEl.textContent = '€' + (completedCount ? (revenue / completedCount).toFixed(2) : '0.00');
 }
 
 function timeAgo(iso) {
