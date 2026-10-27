@@ -129,7 +129,7 @@ const server = http.createServer((req,res)=>{
     if (!auth(req,res)) return;
     let body=''; req.on('data',c=>body+=c); req.on('end',()=>{
       const {status} = JSON.parse(body);
-      const allowedStatuses=['new','accepted','rejected','completed'];
+      const allowedStatuses=['new','accepted','rejected','completed','preparing','ready','out_for_delivery'];
       if (!allowedStatuses.includes(status)) { res.statusCode=400; res.end('Invalid status'); return; }
       const orders = readOrders();
       if (!orders.find(x=>x.id==m[1])) { res.statusCode=404; res.end('Not found'); return; }
