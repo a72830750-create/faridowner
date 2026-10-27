@@ -1,10 +1,10 @@
-const SESSION_KEY = 'forno99_session';
+const SESSION_KEY = 'alikebab_session';
 const API = (window.API_BASE||'') + '/api/orders';
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
     if (r.status === 401 && !String(url).includes('/api/login')) {
       sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('forno99_token');
+      sessionStorage.removeItem('alikebab_token');
       showLogin();
       if (els.loginError) { els.loginError.textContent = 'Sessione scaduta. Effettua di nuovo il login.'; els.loginError.classList.remove('hidden'); }
       throw new Error('unauthorized');
@@ -55,8 +55,8 @@ function esc(v){ return String(v||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'
 function rome(d) { const x = new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Rome' })); if (x.getHours() < 11) x.setDate(x.getDate() - 1); return x; }
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
-async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
-function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
+async function loadOrders() { const t = sessionStorage.getItem('alikebab_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
+function saveStatus(id, status) { const t=sessionStorage.getItem('alikebab_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
 
 function renderStats() {
   const c = { new: 0, accepted: 0, preparing: 0, ready: 0, out_for_delivery: 0, rejected: 0, completed: 0 };
@@ -119,7 +119,7 @@ async function printReceipt(order) {
       .center{text-align:center}
       .muted{font-size:11px;color:#555}
     </style></head><body>
-      <h3>FARID KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
+      <h3>ALI KEBABBARO</h3><h4>Order #${esc(order.order_number)}</h4>
       <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
       <div>Via Leopoldo Galeotti, 51017 Pescia PT</div>
       <div>${order.order_type}</div>
@@ -184,7 +184,7 @@ async function printReceipt(order) {
     const escposData = new Uint8Array([
       0x1B, 0x40,                             // Initialize
       0x1B, 0x61, 0x01,                       // Center Align
-      ...new TextEncoder().encode("FARID KEBAB\n\n"),
+      ...new TextEncoder().encode("ALI KEBABBARO\n\n"),
       0x1B, 0x61, 0x00,                       // Left Align
       ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
       ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
@@ -318,7 +318,7 @@ els.loginForm.addEventListener('submit', e => {
     return r.json();
   }).then(d=>{
     sessionStorage.setItem(SESSION_KEY,'1');
-    sessionStorage.setItem('forno99_token', d.token);
+    sessionStorage.setItem('alikebab_token', d.token);
     els.loginError.classList.add('hidden');
     showDashboard();
     loadAndRender();
@@ -329,10 +329,10 @@ els.loginForm.addEventListener('submit', e => {
 });
 
 els.signoutBtn.addEventListener('click', () => {
-  const t = sessionStorage.getItem('forno99_token');
+  const t = sessionStorage.getItem('alikebab_token');
   fetch((window.API_BASE||'') + '/api/logout', {method:'POST', headers:{'Authorization':'Bearer '+t}}).finally(()=>{
     sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('forno99_token');
+    sessionStorage.removeItem('alikebab_token');
     showLogin();
   });
 });
@@ -430,6 +430,6 @@ setInterval(() => {
 
 // Toggle accepting orders
 const toggleBtn=document.createElement("button");toggleBtn.textContent="Toggle Orders";toggleBtn.className="btn btn-ghost btn-sm";toggleBtn.style.position="fixed";toggleBtn.style.bottom="20px";toggleBtn.style.right="20px";toggleBtn.style.zIndex="9999";document.body.appendChild(toggleBtn);
-toggleBtn.addEventListener("click",async()=>{const t=sessionStorage.getItem("forno99_token");const r=await fetch((window.API_BASE||"")+"/api/settings",{headers:{Authorization:"Bearer "+t}});const d=await r.json();const next=d.accepting_orders==="false"?"true":"false";await fetch((window.API_BASE||"")+"/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({key:"accepting_orders",value:next})});alert("Orders "+(next==="true"?"ON":"OFF"));});
+toggleBtn.addEventListener("click",async()=>{const t=sessionStorage.getItem("alikebab_token");const r=await fetch((window.API_BASE||"")+"/api/settings",{headers:{Authorization:"Bearer "+t}});const d=await r.json();const next=d.accepting_orders==="false"?"true":"false";await fetch((window.API_BASE||"")+"/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({key:"accepting_orders",value:next})});alert("Orders "+(next==="true"?"ON":"OFF"));});
 
 initAuth();
