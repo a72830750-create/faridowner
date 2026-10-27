@@ -40,7 +40,7 @@ const els = {
 };
 
 let orders = [];
-let currentStatus = 'all';
+let currentStatus = 'new';
 let dateFilter = 'today';
 let searchQuery = '';
 let selectedOrder = null;
