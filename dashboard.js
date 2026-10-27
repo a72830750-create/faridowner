@@ -60,11 +60,14 @@ function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'
 
 function renderStats() {
   const c = { new: 0, accepted: 0, preparing: 0, ready: 0, out_for_delivery: 0, rejected: 0, completed: 0 };
-  orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; });
+  let revenue = 0;
+  orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; if (o.status === 'completed') revenue += Number(o.total) || 0; });
   document.getElementById('stat-new').textContent = c.new;
   document.getElementById('stat-accepted').textContent = c.accepted;
   document.getElementById('stat-rejected').textContent = c.rejected;
   document.getElementById('stat-completed').textContent = c.completed;
+  const revEl = document.getElementById('stat-revenue');
+  if (revEl) revEl.textContent = '€' + revenue.toFixed(2);
 }
 
 function timeAgo(iso) {
@@ -217,7 +220,7 @@ function renderOrders() {
     const pa = a.status === 'new' ? 0 : 1;
     const pb = b.status === 'new' ? 0 : 1;
     if (pa !== pb) return pa - pb;
-    return new Date(b.created_at) - new Date(a.created_at);
+    return new Date(a.created_at) - new Date(b.created_at);
   });
   els.orderList.innerHTML = '';
   els.resultCount.textContent = filtered.length + ' ordini';
@@ -230,7 +233,8 @@ function renderOrders() {
   els.emptyState.classList.add('hidden');
   filtered.forEach(o => {
     const card = document.createElement('div');
-    card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '');
+    const waiting = o.status === 'new' && (Date.now() - new Date(o.created_at).getTime()) > 300000;
+    card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
     card.innerHTML = `
       <div class="order-head">
         <div class="order-number">${esc(o.order_number)} <span class="order-id">ID: ${o.id}</span></div>
@@ -264,13 +268,15 @@ function renderOrders() {
 
 function setStatus(id, status) {
   const o = orders.find(x => String(x.id) === String(id));
-  if (!o) return;
+  if (!o || o._saving) return;
+  o._saving = true;
   saveStatus(id, status).then(() => {
+    o._saving = false;
     o.status = status;
     renderStats();
     renderOrders();
     showToast(`Ordine ${o.order_number} → ${status}`);
-  }).catch(() => showToast('Errore aggiornamento'));
+  }).catch(() => { o._saving = false; showToast('Errore aggiornamento'); });
 }
 
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
