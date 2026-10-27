@@ -253,7 +253,7 @@ async function printReceipt(order) {
     console.log('Order sent to printer successfully.');
 
   } catch (error) {
-    console.error('Bluetooth Print Error:', error);
+    console.error('Bluetooth Stampa Error:', error);
     alert('Bluetooth print failed: ' + (error && error.message ? error.message : error));
   }
 }
@@ -299,12 +299,12 @@ function renderOrders() {
       <div class="order-foot">
         <div class="order-total">€${Number(o.total).toFixed(2)}</div>
         <div class="order-actions">
-          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Update</button>
-          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Print</button>
-          ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accept</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Reject</button>` : ''}
-          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">Preparing</button>` : ''}
-          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}">Mark Ready</button>` : ''}
-          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Complete</button>` : ''}
+          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
+          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Stampa</button>
+          ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>` : ''}
+          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>` : ''}
+          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}">Segna pronto</button>` : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>` : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
