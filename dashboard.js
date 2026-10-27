@@ -310,7 +310,7 @@ function initAuth() {
 let knownIds = new Set();
 let unacceptedNew = new Set();
 let alarmTimer = null;
-function playAlarm() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sawtooth'; const now=ctx.currentTime; o.frequency.setValueAtTime(600, now); o.frequency.linearRampToValueAtTime(1200, now+0.5); o.frequency.linearRampToValueAtTime(600, now+1.0); o.frequency.linearRampToValueAtTime(1200, now+1.5); g.gain.setValueAtTime(0.4, now); g.gain.exponentialRampToValueAtTime(0.001, now+1.5); o.start(now); o.stop(now+1.5); } catch(e){ console.error('alarm',e); } }
+function playAlarm() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sawtooth'; const now=ctx.currentTime; o.frequency.setValueAtTime(600, now); o.frequency.linearRampToValueAtTime(1200, now+0.5); o.frequency.linearRampToValueAtTime(600, now+1.0); o.frequency.linearRampToValueAtTime(1200, now+1.5); g.gain.setValueAtTime(0.8, now); g.gain.exponentialRampToValueAtTime(0.001, now+2.0); o.start(now); o.stop(now+2.0); } catch(e){ console.error('alarm',e); } }
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
