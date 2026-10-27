@@ -303,3 +303,12 @@ body {
 
 /* ===== Waiting highlight ===== */
 .order-card.waiting { border-left:4px solid #ff9800; background:#fff8e1; }
+
+.earnings-history { background: var(--card, #1e1e2e); border-radius: 12px; padding: 12px; margin: 12px 0; }
+.earnings-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.earnings-tab { padding: 6px 10px; border: 1px solid #333; background: transparent; color: #ccc; border-radius: 8px; cursor: pointer; }
+.earnings-tab.active { background: #ff7a00; color: #fff; border-color: #ff7a00; }
+.earnings-body { display: flex; gap: 24px; flex-wrap: wrap; }
+.earnings-stat { display: flex; flex-direction: column; }
+.earnings-label { font-size: 12px; color: #888; }
+.earnings-value { font-size: 20px; font-weight: 700; }

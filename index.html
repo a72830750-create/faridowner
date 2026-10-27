@@ -82,7 +82,22 @@
                     <div class="stat-value" id="stat-avg">€0</div>
                 </div>
             </section>
-
+            <!-- ===== Earnings History ===== -->
+            <section class="earnings-history" id="earnings-history">
+              <div class="earnings-tabs" id="earnings-tabs">
+                <button class="earnings-tab active" data-range="today">Oggi</button>
+                <button class="earnings-tab" data-range="yesterday">Ieri</button>
+                <button class="earnings-tab" data-range="7d">7 giorni</button>
+                <button class="earnings-tab" data-range="30d">30 giorni</button>
+                <button class="earnings-tab" data-range="month">Questo mese</button>
+                <button class="earnings-tab" data-range="total">Totale</button>
+              </div>
+              <div class="earnings-body">
+                <div class="earnings-stat"><span class="earnings-label">Ricavo</span><span class="earnings-value" id="earn-revenue">€0.00</span></div>
+                <div class="earnings-stat"><span class="earnings-label">Ordini</span><span class="earnings-value" id="earn-count">0</span></div>
+                <div class="earnings-stat"><span class="earnings-label">Media</span><span class="earnings-value" id="earn-avg">€0.00</span></div>
+              </div>
+            </section>
             <!-- ===== Filters ===== -->
             <div class="filter-bar">
                 <div class="filter-tabs" id="filter-tabs">

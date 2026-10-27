@@ -90,7 +90,34 @@ function renderStats() {
   if (avgEl) avgEl.textContent = '€' + (completedCount ? (revenue / completedCount).toFixed(2) : '0.00');
 }
 
-function timeAgo(iso) {
+let earningsRange = 'today';
+function revenueForRange(range) {
+  const now = rome(new Date());
+  let revenue = 0, count = 0;
+  orders.forEach(o => {
+    if (o.status !== 'completed') return;
+    const od = rome(new Date(o.created_at));
+    let ok = false;
+    if (range === 'today') ok = startOfDay(od).getTime() === startOfDay(now).getTime();
+    else if (range === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); ok = startOfDay(od).getTime() === startOfDay(y).getTime(); }
+    else if (range === '7d') { const t = new Date(now); t.setDate(t.getDate() - 7); ok = od >= t; }
+    else if (range === '30d') { const t = new Date(now); t.setDate(t.getDate() - 30); ok = od >= t; }
+    else if (range === 'month') ok = od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear();
+    else if (range === 'total') ok = true;
+    if (!ok) return;
+    revenue += Number(o.total) || 0; count++;
+  });
+  return { revenue, count };
+}
+function renderEarnings() {
+  const { revenue, count } = revenueForRange(earningsRange);
+  const revEl = document.getElementById('earn-revenue');
+  const cntEl = document.getElementById('earn-count');
+  const avgEl = document.getElementById('earn-avg');
+  if (revEl) revEl.textContent = '€' + revenue.toFixed(2);
+  if (cntEl) cntEl.textContent = count;
+  if (avgEl) avgEl.textContent = '€' + (count ? (revenue / count).toFixed(2) : '0.00');
+}
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return 'ora';
   if (diff < 3600) return Math.floor(diff / 60) + 'm fa';
@@ -295,6 +322,7 @@ function setStatus(id, status, btn) {
     o.status = status;
     renderStats();
     renderOrders();
+    renderEarnings();
     showToast(`Ordine ${o.order_number} → ${status}`);
   }).catch(() => { o._saving = false; if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
@@ -334,7 +362,7 @@ function loadAndRender() {
       alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 2500);
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
-    orders = o; renderStats(); renderOrders();
+    orders = o; renderStats(); renderOrders(); renderEarnings();
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
@@ -461,4 +489,12 @@ setInterval(() => {
 const toggleBtn=document.createElement("button");toggleBtn.textContent="Toggle Orders";toggleBtn.className="btn btn-ghost btn-sm";toggleBtn.style.position="fixed";toggleBtn.style.bottom="20px";toggleBtn.style.right="20px";toggleBtn.style.zIndex="9999";document.body.appendChild(toggleBtn);
 toggleBtn.addEventListener("click",async()=>{const t=sessionStorage.getItem("forno99_token");const r=await fetch((window.API_BASE||"")+"/api/settings",{headers:{Authorization:"Bearer "+t}});const d=await r.json();const next=d.accepting_orders==="false"?"true":"false";await fetch((window.API_BASE||"")+"/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({key:"accepting_orders",value:next})});});
 
-initAuth();
+const earningsTabs = document.getElementById('earnings-tabs');
+if (earningsTabs) earningsTabs.addEventListener('click', e => {
+  const tab = e.target.closest('.earnings-tab');
+  if (!tab) return;
+  earningsTabs.querySelectorAll('.earnings-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  earningsRange = tab.dataset.range;
+  renderEarnings();
+});
