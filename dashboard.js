@@ -389,7 +389,6 @@ if (els.resetBtn) els.resetBtn.addEventListener('click', () => {
 els.orderList.addEventListener('click', e => {
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
-  alert('clicked ' + btn.dataset.action);
   const id = btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'status') {
