@@ -281,7 +281,7 @@ function initAuth() {
 }
 
 let knownIds = new Set();
-function playBeep() { try { const ctx = new (window.AudioContext||window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.value=0.15; o.start(); setTimeout(()=>{o.stop();ctx.close();},200); } catch(e){} }
+function playBeep() { try { const Ctx = window.AudioContext||window.webkitAudioContext; if(!Ctx) return; const ctx = new Ctx(); if(ctx.state==='suspended') ctx.resume(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=1046; g.gain.setValueAtTime(0.4, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5); o.start(ctx.currentTime); o.stop(ctx.currentTime+0.5); setTimeout(()=>ctx.close(),700); } catch(e){ console.error('beep',e); } }
 function loadAndRender() {
   loadOrders().then(o => {
     const newOnes = o.filter(x => !knownIds.has(x.id));
