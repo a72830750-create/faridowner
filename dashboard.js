@@ -86,8 +86,6 @@ function renderStats() {
   document.getElementById('stat-completed').textContent = c.completed;
   const revEl = document.getElementById('stat-revenue');
   if (revEl) revEl.textContent = '€' + revenue.toFixed(2);
-  const avgEl = document.getElementById('stat-avg');
-  if (avgEl) avgEl.textContent = '€' + (completedCount ? (revenue / completedCount).toFixed(2) : '0.00');
 }
 
 let earningsRange = 'today';
