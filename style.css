@@ -296,3 +296,10 @@ body {
   background: #fff4f1;
 }
 .order-id { color: var(--muted); font-size: 12px; margin-left: 8px; }
+
+/* ===== Connection banner ===== */
+.conn-banner { display:none; background:#ffebee; color:#c00; padding:8px 12px; text-align:center; font-weight:600; font-size:13px; border-bottom:1px solid #ffcdd2; }
+.conn-banner.show { display:block; }
+
+/* ===== Waiting highlight ===== */
+.order-card.waiting { border-left:4px solid #ff9800; background:#fff8e1; }

@@ -58,16 +58,19 @@ function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x
 async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
 function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
 
+function isToday(o) { return startOfDay(rome(new Date(o.created_at))).getTime() === startOfDay(rome(new Date())).getTime(); }
 function renderStats() {
   const c = { new: 0, accepted: 0, preparing: 0, ready: 0, out_for_delivery: 0, rejected: 0, completed: 0 };
-  let revenue = 0;
-  orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; if (o.status === 'completed') revenue += Number(o.total) || 0; });
+  let revenue = 0, completedToday = 0;
+  orders.forEach(o => { if (c[o.status] !== undefined) c[o.status]++; if (o.status === 'completed' && isToday(o)) { revenue += Number(o.total) || 0; completedToday++; } });
   document.getElementById('stat-new').textContent = c.new;
   document.getElementById('stat-accepted').textContent = c.accepted;
   document.getElementById('stat-rejected').textContent = c.rejected;
   document.getElementById('stat-completed').textContent = c.completed;
   const revEl = document.getElementById('stat-revenue');
   if (revEl) revEl.textContent = '€' + revenue.toFixed(2);
+  const avgEl = document.getElementById('stat-avg');
+  if (avgEl) avgEl.textContent = '€' + (completedToday ? (revenue / completedToday).toFixed(2) : '0.00');
 }
 
 function timeAgo(iso) {
@@ -235,6 +238,8 @@ function renderOrders() {
     const card = document.createElement('div');
     const waiting = o.status === 'new' && (Date.now() - new Date(o.created_at).getTime()) > 300000;
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
+    // disable actions while saving
+    if (o._saving) card.classList.add('saving');
     card.innerHTML = `
       <div class="order-head">
         <div class="order-number">${esc(o.order_number)} <span class="order-id">ID: ${o.id}</span></div>
@@ -266,17 +271,18 @@ function renderOrders() {
   });
 }
 
-function setStatus(id, status) {
+function setStatus(id, status, btn) {
   const o = orders.find(x => String(x.id) === String(id));
   if (!o || o._saving) return;
   o._saving = true;
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
   saveStatus(id, status).then(() => {
     o._saving = false;
     o.status = status;
     renderStats();
     renderOrders();
     showToast(`Ordine ${o.order_number} → ${status}`);
-  }).catch(() => { o._saving = false; showToast('Errore aggiornamento'); });
+  }).catch(() => { o._saving = false; if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
 
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
@@ -301,7 +307,9 @@ document.addEventListener('click', ensureAudio, {once:false});
 document.addEventListener('keydown', ensureAudio, {once:false});
 
 function loadAndRender() {
+  const banner = document.getElementById('conn-banner');
   loadOrders().then(o => {
+    if (banner) banner.classList.remove('show');
     const newOnes = o.filter(x => !knownIds.has(x.id));
     if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i'); }
     o.forEach(x => knownIds.add(x.id));
@@ -313,7 +321,7 @@ function loadAndRender() {
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders();
-  }).catch(() => showToast('Errore caricamento ordini'));
+  }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
 els.loginForm.addEventListener('submit', e => {
@@ -402,11 +410,11 @@ els.orderList.addEventListener('click', e => {
     selectedOrder = orders.find(x => String(x.id) === String(id));
     if (selectedOrder) els.statusOrderInfo.textContent = `${selectedOrder.order_number} — ${selectedOrder.customer_name}`;
     els.statusModal.classList.remove('hidden');
-  } else if (action === 'accept') setStatus(id, 'accepted');
-  else if (action === 'reject') setStatus(id, 'rejected');
-  else if (action === 'preparing') setStatus(id, 'preparing');
-  else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery'); }
-  else if (action === 'complete') setStatus(id, 'completed');
+  } else if (action === 'accept') setStatus(id, 'accepted', btn);
+  else if (action === 'reject') setStatus(id, 'rejected', btn);
+  else if (action === 'preparing') setStatus(id, 'preparing', btn);
+  else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery', btn); }
+  else if (action === 'complete') setStatus(id, 'completed', btn);
   else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printReceipt(o); }
 });
 
