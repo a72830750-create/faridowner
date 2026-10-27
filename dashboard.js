@@ -405,7 +405,7 @@ if (els.refreshBtn) els.refreshBtn.addEventListener('click', () => {
 
 setInterval(() => {
   if (!els.dashboard.classList.contains('hidden')) {
-    loadOrders().then(o => { orders = o; renderStats(); renderOrders(); }).catch(() => showToast('Errore caricamento ordini'));
+    loadAndRender();
   }
 }, 5000);
 
