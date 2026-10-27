@@ -427,7 +427,7 @@ els.orderList.addEventListener('click', e => {
     selectedOrder = orders.find(x => String(x.id) === String(id));
     if (selectedOrder) els.statusOrderInfo.textContent = `${selectedOrder.order_number} — ${selectedOrder.customer_name}`;
     els.statusModal.classList.remove('hidden');
-  } else if (action === 'accept') setStatus(id, 'accepted', btn);
+  } else if (action === 'accept') setStatus(id, 'preparing', btn);
   else if (action === 'reject') setStatus(id, 'rejected', btn);
   else if (action === 'preparing') setStatus(id, 'preparing', btn);
   else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery', btn); }
