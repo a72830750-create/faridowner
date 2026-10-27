@@ -321,6 +321,8 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     o.status = status;
+    unacceptedNew.delete(o.id);
+    if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     renderStats();
     renderOrders();
     renderEarnings();
