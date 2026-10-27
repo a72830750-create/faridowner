@@ -262,7 +262,7 @@ function renderOrders() {
 }
 
 function setStatus(id, status) {
-  const o = orders.find(x => x.id === id);
+  const o = orders.find(x => String(x.id) === String(id));
   if (!o) return;
   saveStatus(id, status).then(() => {
     o.status = status;
@@ -394,15 +394,15 @@ els.orderList.addEventListener('click', e => {
   const id = btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'status') {
-    selectedOrder = orders.find(x => x.id === id);
+    selectedOrder = orders.find(x => String(x.id) === String(id));
     if (selectedOrder) els.statusOrderInfo.textContent = `${selectedOrder.order_number} — ${selectedOrder.customer_name}`;
     els.statusModal.classList.remove('hidden');
   } else if (action === 'accept') setStatus(id, 'accepted');
   else if (action === 'reject') setStatus(id, 'rejected');
   else if (action === 'preparing') setStatus(id, 'preparing');
-  else if (action === 'ready') { const oo = orders.find(x => x.id === id); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery'); }
+  else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery'); }
   else if (action === 'complete') setStatus(id, 'completed');
-  else if (action === 'print') { const o = orders.find(x => x.id === id); if (o) printReceipt(o); }
+  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printReceipt(o); }
 });
 
 if (els.statusModal) {
