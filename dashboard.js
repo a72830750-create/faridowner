@@ -280,8 +280,15 @@ function initAuth() {
   else showLogin();
 }
 
+let knownIds = new Set();
+function playBeep() { try { const ctx = new (window.AudioContext||window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=880; g.gain.value=0.15; o.start(); setTimeout(()=>{o.stop();ctx.close();},200); } catch(e){} }
 function loadAndRender() {
-  loadOrders().then(o => { orders = o; renderStats(); renderOrders(); }).catch(() => showToast('Errore caricamento ordini'));
+  loadOrders().then(o => {
+    const newOnes = o.filter(x => !knownIds.has(x.id));
+    if (knownIds.size && newOnes.length) { playBeep(); showToast(newOnes.length + ' nuovo/i ordine/i'); }
+    o.forEach(x => knownIds.add(x.id));
+    orders = o; renderStats(); renderOrders();
+  }).catch(() => showToast('Errore caricamento ordini'));
 }
 
 els.loginForm.addEventListener('submit', e => {
