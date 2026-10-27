@@ -118,6 +118,7 @@ function renderEarnings() {
   if (cntEl) cntEl.textContent = count;
   if (avgEl) avgEl.textContent = '€' + (count ? (revenue / count).toFixed(2) : '0.00');
 }
+function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return 'ora';
   if (diff < 3600) return Math.floor(diff / 60) + 'm fa';
