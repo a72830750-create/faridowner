@@ -358,7 +358,7 @@ function loadAndRender() {
     unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
     if (unacceptedNew.size && !alarmTimer) {
       playAlarm();
-      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 2500);
+      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 5000);
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders(); renderEarnings();
