@@ -352,7 +352,12 @@ function loadAndRender() {
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
     const newOnes = o.filter(x => !knownIds.has(x.id));
-    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i'); }
+    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i');
+      newOnes.forEach(o => {
+        const ok = confirm('Nuovo ordine #' + o.order_number + '\n' + (o.customer_name||'') + '\n' + (o.delivery_address||'') + '\nAccetta?');
+        setStatus(o.id, ok ? 'preparing' : 'rejected');
+      });
+    }
     o.forEach(x => knownIds.add(x.id));
     // track unaccepted new orders
     unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
