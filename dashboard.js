@@ -44,6 +44,7 @@ let currentStatus = 'preparing';
 let dateFilter = 'today';
 let searchQuery = '';
 let selectedOrder = null;
+let selectedNewOrder = null;
 let highlightId = null;
 let highlightTimer = null;
 
@@ -327,6 +328,23 @@ function setStatus(id, status, btn) {
   }).catch(() => { o._saving = false; if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
 
+function showNewOrderModal(o) {
+  selectedNewOrder = o;
+  const idEl = document.getElementById('no-id');
+  if (idEl) idEl.textContent = 'Ordine #' + (o.order_number||o.id);
+  const body = document.getElementById('no-body');
+  if (body) {
+    const items = (o.items||[]).map(i=>`<li>${i.qty}× ${esc(i.name)} — €${(i.qty*i.price).toFixed(2)}</li>`).join('');
+    body.innerHTML = `<p><b>${esc(o.customer_name)}</b> — ${esc(o.customer_phone)}</p>
+      <p>${o.order_type==='delivery'?'Delivery':'Ritiro'} ${o.order_type==='delivery'&&(o.delivery_timing==='later')?('alle '+esc(o.delivery_time)):(o.order_type==='pickup'&&o.pickup_time?'alle '+esc(o.pickup_time):'')}</p>
+      <p>Ordine effettuato: ${new Date(o.created_at).toLocaleString('it-IT')}</p>
+      ${o.delivery_address?`<p>Indirizzo: ${esc(o.delivery_address)}</p>`:''}
+      <ul>${items}</ul>
+      <p><b>Totale: €${Number(o.total).toFixed(2)}</b></p>`;
+  }
+  const m = document.getElementById('neworder-modal');
+  if (m) m.classList.remove('hidden');
+}
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
 function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
 
@@ -354,10 +372,7 @@ function loadAndRender() {
     if (banner) banner.classList.remove('show');
     const newOnes = o.filter(x => !knownIds.has(x.id));
     if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i');
-      newOnes.forEach(o => {
-        const ok = confirm('Nuovo ordine #' + o.order_number + '\n' + (o.customer_name||'') + '\n' + (o.delivery_address||'') + '\nAccetta?');
-        setStatus(o.id, ok ? 'preparing' : 'rejected');
-      });
+      showNewOrderModal(newOnes[0]);
     }
     o.forEach(x => knownIds.add(x.id));
     // track unaccepted new orders
