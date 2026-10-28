@@ -385,13 +385,6 @@ function loadAndRender() {
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders(); renderEarnings();
-    const freshNew = o.filter(x => !knownIds.has(x.id) && x.status==="new");
-    if (freshNew.length) {
-      const firstNew = freshNew[0];
-      selectedOrder = firstNew;
-      els.statusOrderInfo.textContent = firstNew.order_number + ' — ' + firstNew.customer_name + '\n' + firstNew.order_type + ' — ' + (firstNew.delivery_address||'') + '\nNote: ' + (firstNew.notes||'') + '\n' + (firstNew.items||[]).map(function(i){return i.qty+'x '+i.name+' €'+(i.qty*i.price).toFixed(2);}).join('\n') + '\nTotale: €' + Number(firstNew.total).toFixed(2);
-      els.statusModal.classList.remove('hidden');
-    }
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
