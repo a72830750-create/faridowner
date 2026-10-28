@@ -41,7 +41,7 @@ const els = {
 
 let orders = [];
 let selectedNewOrder = null;
-let currentStatus = 'preparing';
+let currentStatus = 'new';
 let dateFilter = 'today';
 let searchQuery = '';
 let selectedOrder = null;
