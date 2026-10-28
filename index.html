@@ -166,6 +166,20 @@
 
         <!-- ===== Toast ===== -->
         <div id="toast" class="toast hidden"></div>
+    <div id="neworder-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header"><h3>Nuovo ordine</h3></div>
+        <div class="modal-body">
+          <p id="no-id"></p>
+          <div id="no-body"></div>
+          <div class="status-actions">
+            <button class="btn btn-success" id="no-accept">Accetta</button>
+            <button class="btn btn-danger" id="no-reject">Rifiuta</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
