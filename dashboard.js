@@ -315,15 +315,18 @@ function setStatus(id, status, btn) {
   const o = orders.find(x => String(x.id) === String(id));
   if (!o || o._saving) return;
   o._saving = true;
+  const prev = o.status;
+  o.status = status;
+  unacceptedNew.delete(o.id);
+  if (!unacceptedNew.size) { if (alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; } stopAlarm(); }
+  renderStats();
+  renderOrders();
+  renderEarnings();
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   saveStatus(id, status).then(() => {
     o._saving = false;
-    o.status = status;
-    renderStats();
-    renderOrders();
-    renderEarnings();
     showToast(`Ordine ${o.order_number} → ${status}`);
-  }).catch(() => { o._saving = false; if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
+  }).catch(() => { o._saving = false; o.status = prev; renderStats(); renderOrders(); renderEarnings(); if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
 
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
