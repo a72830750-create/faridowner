@@ -87,9 +87,7 @@
                 <button class="earnings-tab" data-range="30d">30 giorni</button>
                 <button class="earnings-tab" data-range="month">Questo mese</button>
                 <button class="earnings-tab" data-range="total">Totale</button>
-                <button class="earnings-tab" data-range="custom">Personalizzato</button>
               </div>
-              <div id="earn-custom" class="hidden" style="display:flex;gap:8px;margin:8px 0;"><input type="date" id="earn-from" class="form-input"><input type="date" id="earn-to" class="form-input"></div>
               <div class="earnings-body">
                 <div class="earnings-stat"><span class="earnings-label">Ricavo</span><span class="earnings-value" id="earn-revenue">€0.00</span></div>
                 <div class="earnings-stat"><span class="earnings-label">Ordini</span><span class="earnings-value" id="earn-count">0</span></div>
@@ -149,11 +147,12 @@
             <div class="modal-card">
                 <div class="modal-header">
                     <h3>Aggiorna stato ordine</h3>
+                    <button class="modal-close" id="status-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p id="status-order-info" style="white-space:pre-wrap;font-size:13px;"></p>
+                    <p id="status-order-info">Order #1234</p>
                     <div class="status-actions">
-                        <button class="btn btn-success" data-status="preparing">Accetta</button>
+                        <button class="btn btn-success" data-status="accepted">Accetta</button>
                         <button class="btn btn-danger" data-status="rejected">Rifiuta</button>
                         <button class="btn btn-primary" data-status="completed">Segna completato</button>
                         <button class="btn btn-ghost" data-status="new">Ripristina</button>
@@ -163,18 +162,6 @@
                     <button class="btn btn-ghost" id="status-cancel">Chiudi</button>
                 </div>
             </div>
-        </div>
-
-        <!-- ===== New Order Modal ===== -->
-        <div id="neworder-modal" class="modal hidden">
-          <div class="modal-card">
-            <div class="modal-header"><h3 id="no-id">Ordine</h3><button class="modal-close" id="no-close">&times;</button></div>
-            <div class="modal-body" id="no-body"></div>
-            <div class="modal-footer">
-              <button class="btn btn-danger" id="no-reject">Rifiuta</button>
-              <button class="btn btn-success" id="no-accept">Accetta</button>
-            </div>
-          </div>
         </div>
 
         <!-- ===== Toast ===== -->

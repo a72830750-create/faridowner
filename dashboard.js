@@ -44,7 +44,6 @@ let currentStatus = 'preparing';
 let dateFilter = 'today';
 let searchQuery = '';
 let selectedOrder = null;
-let selectedNewOrder = null;
 let highlightId = null;
 let highlightTimer = null;
 
@@ -102,7 +101,6 @@ function revenueForRange(range) {
     else if (range === '7d') { const t = new Date(now); t.setDate(t.getDate() - 7); ok = od >= t; }
     else if (range === '30d') { const t = new Date(now); t.setDate(t.getDate() - 30); ok = od >= t; }
     else if (range === 'month') ok = od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear();
-    else if (range === 'custom') { const from= document.getElementById('earn-from'); const to=document.getElementById('earn-to'); let f=from&&from.value?new Date(from.value+'T00:00:00'):null; let t=to&&to.value?new Date(to.value+'T23:59:59'):null; ok = (!f||od>=f)&&(!t||od<=t); }
     else if (range === 'total') ok = true;
     if (!ok) return;
     revenue += Number(o.total) || 0; count++;
@@ -321,8 +319,6 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     o.status = status;
-    unacceptedNew.delete(o.id);
-    if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     renderStats();
     renderOrders();
     renderEarnings();
@@ -330,23 +326,6 @@ function setStatus(id, status, btn) {
   }).catch(() => { o._saving = false; if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
 
-function showNewOrderModal(o) {
-  selectedNewOrder = o;
-  const idEl = document.getElementById('no-id');
-  if (idEl) idEl.textContent = 'Ordine #' + (o.order_number||o.id);
-  const body = document.getElementById('no-body');
-  if (body) {
-    const items = (o.items||[]).map(i=>`<li>${i.qty}× ${esc(i.name)} — €${(i.qty*i.price).toFixed(2)}</li>`).join('');
-    body.innerHTML = `<p><b>${esc(o.customer_name)}</b> — ${esc(o.customer_phone)}</p>
-      <p>${o.order_type==='delivery'?'Delivery':'Ritiro'} ${o.order_type==='delivery'&&(o.delivery_timing==='later')?('alle '+esc(o.delivery_time)):(o.order_type==='pickup'&&o.pickup_time?'alle '+esc(o.pickup_time):'')}</p>
-      <p>Ordine effettuato: ${new Date(o.created_at).toLocaleString('it-IT')}</p>
-      ${o.delivery_address?`<p>Indirizzo: ${esc(o.delivery_address)}</p>`:''}
-      <ul>${items}</ul>
-      <p><b>Totale: €${Number(o.total).toFixed(2)}</b></p>`;
-  }
-  const m = document.getElementById('neworder-modal');
-  if (m) m.classList.remove('hidden');
-}
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
 function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
 
@@ -358,7 +337,7 @@ function initAuth() {
 let knownIds = new Set();
 let unacceptedNew = new Set();
 let alarmTimer = null;
-function playAlarm() { const ctx = ensureAudio(); if(!ctx) return; try { if(ctx.state==='suspended') ctx.resume(); const o=ctx.createOscillator(); const g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sawtooth'; const now=ctx.currentTime; o.frequency.setValueAtTime(600, now); o.frequency.linearRampToValueAtTime(1200, now+0.5); o.frequency.linearRampToValueAtTime(600, now+1.0); o.frequency.linearRampToValueAtTime(1200, now+1.5); g.gain.setValueAtTime(0.8, now); g.gain.exponentialRampToValueAtTime(0.001, now+2.0); o.start(now); o.stop(now+2.0); } catch(e){ console.error('alarm',e); } }
+function playAlarm() { try { const a = new Audio('ali_kebab_real_siren_alert.wav'); a.play(); } catch(e){ console.error('alarm',e); } }
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
@@ -372,16 +351,14 @@ function loadAndRender() {
   const banner = document.getElementById('conn-banner');
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
-    const newOnes = o.filter(x => !knownIds.has(x.id) && x.status === 'new');
-    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i');
-      showNewOrderModal(newOnes[0]);
-    }
+    const newOnes = o.filter(x => !knownIds.has(x.id));
+    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i'); }
     o.forEach(x => knownIds.add(x.id));
     // track unaccepted new orders
     unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
     if (unacceptedNew.size && !alarmTimer) {
       playAlarm();
-      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 1000);
+      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 2500);
     }
     if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
     orders = o; renderStats(); renderOrders(); renderEarnings();
@@ -518,6 +495,5 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
   earningsTabs.querySelectorAll('.earnings-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   earningsRange = tab.dataset.range;
-  const ec=document.getElementById('earn-custom'); if(ec) ec.classList.toggle('hidden', earningsRange!=='custom');
   renderEarnings();
 });
