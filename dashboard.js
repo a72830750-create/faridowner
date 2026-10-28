@@ -327,6 +327,13 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     showToast(`Ordine ${o.order_number} → ${status}`);
+    if (currentStatus !== 'all') {
+      currentStatus = status;
+      els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      const nt = els.filterTabs.querySelector('.filter-tab[data-status="'+status+'"]');
+      if (nt) nt.classList.add('active');
+      renderOrders();
+    }
   }).catch(() => { o._saving = false; o.status = prev; renderStats(); renderOrders(); renderEarnings(); if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
 }
 
