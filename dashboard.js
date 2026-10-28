@@ -101,6 +101,7 @@ function revenueForRange(range) {
     else if (range === '7d') { const t = new Date(now); t.setDate(t.getDate() - 7); ok = od >= t; }
     else if (range === '30d') { const t = new Date(now); t.setDate(t.getDate() - 30); ok = od >= t; }
     else if (range === 'month') ok = od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear();
+    else if (range === 'custom') { const from= document.getElementById('earn-from'); const to=document.getElementById('earn-to'); let f=from&&from.value?new Date(from.value+'T00:00:00'):null; let t=to&&to.value?new Date(to.value+'T23:59:59'):null; ok = (!f||od>=f)&&(!t||od<=t); }
     else if (range === 'total') ok = true;
     if (!ok) return;
     revenue += Number(o.total) || 0; count++;
@@ -500,5 +501,6 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
   earningsTabs.querySelectorAll('.earnings-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   earningsRange = tab.dataset.range;
+  const ec=document.getElementById('earn-custom'); if(ec) ec.classList.toggle('hidden', earningsRange!=='custom');
   renderEarnings();
 });
