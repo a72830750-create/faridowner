@@ -353,8 +353,9 @@ function loadAndRender() {
   const banner = document.getElementById('conn-banner');
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
-    const newOnes = o.filter(x => !knownIds.has(x.id));
-    if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i'); }
+    const newOnes = o.filter(x => x.status === 'new');
+    const modal = document.getElementById('neworder-modal');
+    if (newOnes.length && (!modal || modal.classList.contains('hidden'))) { showNewOrderModal(newOnes[0]); }
     o.forEach(x => knownIds.add(x.id));
     // track unaccepted new orders
     unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
