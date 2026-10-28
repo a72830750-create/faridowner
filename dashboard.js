@@ -344,6 +344,7 @@ function showNewOrderModal(o) {
       <p>${o.order_type==='delivery'?'Delivery':'Ritiro'} ${o.order_type==='delivery'&&(o.delivery_timing==='later')?('alle '+esc(o.delivery_time)):(o.order_type==='pickup'&&o.pickup_time?'alle '+esc(o.pickup_time):'')}</p>
       <p>Ordine effettuato: ${new Date(o.created_at).toLocaleString('it-IT')}</p>
       ${o.delivery_address?`<p>Indirizzo: ${esc(o.delivery_address)}</p>`:''}
+      ${o.notes?`<p><b>Note:</b> ${esc(o.notes)}</p>`:''}
       <ul>${items}</ul>
       <p><b>Totale: €${Number(o.total).toFixed(2)}</b></p>`;
   }
