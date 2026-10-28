@@ -372,7 +372,7 @@ function loadAndRender() {
   const banner = document.getElementById('conn-banner');
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
-    const newOnes = o.filter(x => !knownIds.has(x.id));
+    const newOnes = o.filter(x => !knownIds.has(x.id) && x.status === 'new');
     if (knownIds.size && newOnes.length) { showToast(newOnes.length + ' nuovo/i ordine/i');
       showNewOrderModal(newOnes[0]);
     }
