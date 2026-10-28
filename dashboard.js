@@ -337,7 +337,9 @@ function initAuth() {
 let knownIds = new Set();
 let unacceptedNew = new Set();
 let alarmTimer = null;
-function playAlarm() { try { const a = new Audio('ali_kebab_real_siren_alert.wav'); a.play(); } catch(e){ console.error('alarm',e); } }
+let alarmAudio = null;
+function playAlarm() { try { if (!alarmAudio) { alarmAudio = new Audio('ali_kebab_real_siren_alert.wav'); alarmAudio.loop = true; } alarmAudio.play(); } catch(e){ console.error('alarm',e); } }
+function stopAlarm() { if (alarmAudio) { alarmAudio.pause(); alarmAudio.currentTime = 0; } }
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
@@ -360,7 +362,7 @@ function loadAndRender() {
       playAlarm();
       alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 5000);
     }
-    if (!unacceptedNew.size && alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; }
+    if (!unacceptedNew.size) { if (alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; } stopAlarm(); }
     orders = o; renderStats(); renderOrders(); renderEarnings();
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
