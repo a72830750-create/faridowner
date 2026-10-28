@@ -40,6 +40,7 @@ const els = {
 };
 
 let orders = [];
+let selectedNewOrder = null;
 let currentStatus = 'preparing';
 let dateFilter = 'today';
 let searchQuery = '';
@@ -331,6 +332,32 @@ function setStatus(id, status, btn) {
 
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
 function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
+
+function showNewOrderModal(o) {
+  selectedNewOrder = o;
+  const idEl = document.getElementById('no-id');
+  if (idEl) idEl.textContent = 'Ordine #' + (o.order_number||o.id);
+  const body = document.getElementById('no-body');
+  if (body) {
+    const items = (o.items||[]).map(i=>`<li>${i.qty}× ${esc(i.name)} — €${(i.qty*i.price).toFixed(2)}</li>`).join('');
+    body.innerHTML = `<p><b>${esc(o.customer_name)}</b> — ${esc(o.customer_phone)}</p>
+      <p>${o.order_type==='delivery'?'Delivery':'Ritiro'} ${o.order_type==='delivery'&&(o.delivery_timing==='later')?('alle '+esc(o.delivery_time)):(o.order_type==='pickup'&&o.pickup_time?'alle '+esc(o.pickup_time):'')}</p>
+      <p>Ordine effettuato: ${new Date(o.created_at).toLocaleString('it-IT')}</p>
+      ${o.delivery_address?`<p>Indirizzo: ${esc(o.delivery_address)}</p>`:''}
+      <ul>${items}</ul>
+      <p><b>Totale: €${Number(o.total).toFixed(2)}</b></p>`;
+  }
+  const m = document.getElementById('neworder-modal');
+  if (m) m.classList.remove('hidden');
+}
+const btnAccept = document.getElementById('no-accept');
+const btnReject = document.getElementById('no-reject');
+if (btnAccept) btnAccept.addEventListener('click', () => {
+  if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'preparing'); const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden'); }
+});
+if (btnReject) btnReject.addEventListener('click', () => {
+  if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'rejected'); const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden'); }
+});
 
 function initAuth() {
   if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); }
