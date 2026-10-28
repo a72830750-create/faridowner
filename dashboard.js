@@ -358,6 +358,14 @@ if (btnAccept) btnAccept.addEventListener('click', () => {
 if (btnReject) btnReject.addEventListener('click', () => {
   if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'rejected'); const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden'); }
 });
+const btnClose = document.getElementById('no-close');
+if (btnClose) btnClose.addEventListener('click', () => {
+  const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden');
+});
+const modalEl = document.getElementById('neworder-modal');
+if (modalEl) modalEl.addEventListener('click', (e) => {
+  if (e.target === modalEl) modalEl.classList.add('hidden');
+});
 
 function initAuth() {
   if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); }
