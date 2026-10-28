@@ -87,7 +87,9 @@
                 <button class="earnings-tab" data-range="30d">30 giorni</button>
                 <button class="earnings-tab" data-range="month">Questo mese</button>
                 <button class="earnings-tab" data-range="total">Totale</button>
+                <button class="earnings-tab" data-range="custom">Personalizzato</button>
               </div>
+              <div id="earn-custom" class="hidden" style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;"><label style="font-size:12px;color:var(--muted);">Da</label><input type="datetime-local" id="earn-from" class="form-input"><label style="font-size:12px;color:var(--muted);">A</label><input type="datetime-local" id="earn-to" class="form-input"></div>
               <div class="earnings-body">
                 <div class="earnings-stat"><span class="earnings-label">Ricavo</span><span class="earnings-value" id="earn-revenue">€0.00</span></div>
                 <div class="earnings-stat"><span class="earnings-label">Ordini</span><span class="earnings-value" id="earn-count">0</span></div>
@@ -131,9 +133,9 @@
               <aside id="custom-panel" class="custom-panel hidden">
                 <h3>Intervallo personalizzato</h3>
                 <label>Da</label>
-                <input type="date" id="date-from" class="form-input">
+                <input type="datetime-local" id="date-from" class="form-input">
                 <label>A</label>
-                <input type="date" id="date-to" class="form-input">
+                <input type="datetime-local" id="date-to" class="form-input">
                 <div id="selected-range" class="selected-range"></div>
                 <div style="display:flex;gap:8px;margin-top:10px;">
                   <button id="apply-range" class="btn btn-primary btn-sm">Applica filtri</button>

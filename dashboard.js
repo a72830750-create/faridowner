@@ -102,6 +102,7 @@ function revenueForRange(range) {
     else if (range === '7d') { const t = new Date(now); t.setDate(t.getDate() - 7); ok = od >= t; }
     else if (range === '30d') { const t = new Date(now); t.setDate(t.getDate() - 30); ok = od >= t; }
     else if (range === 'month') ok = od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear();
+    else if (range === 'custom') { const from= document.getElementById('earn-from'); const to=document.getElementById('earn-to'); let f=from&&from.value?new Date(from.value):null; let t=to&&to.value?new Date(to.value):null; ok = (!f||od>=f)&&(!t||od<=t); }
     else if (range === 'total') ok = true;
     if (!ok) return;
     revenue += Number(o.total) || 0; count++;
@@ -138,8 +139,8 @@ function getFiltered() {
     if (dateFilter === 'month') { if (od.getMonth() !== now.getMonth() || od.getFullYear() !== now.getFullYear()) return false; }
     if (dateFilter === 'lastmonth') { const lm = new Date(now); lm.setMonth(lm.getMonth() - 1); if (od.getMonth() !== lm.getMonth() || od.getFullYear() !== lm.getFullYear()) return false; }
     if (dateFilter === 'custom') {
-      if (els.dateFrom.value) { const from = new Date(els.dateFrom.value + 'T00:00:00'); if (od < from) return false; }
-      if (els.dateTo.value) { const to = new Date(els.dateTo.value + 'T23:59:59'); if (od > to) return false; }
+      if (els.dateFrom.value) { const from = new Date(els.dateFrom.value); if (od < from) return false; }
+      if (els.dateTo.value) { const to = new Date(els.dateTo.value); if (od > to) return false; }
     }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -544,5 +545,9 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
   earningsTabs.querySelectorAll('.earnings-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   earningsRange = tab.dataset.range;
+  const ec=document.getElementById('earn-custom'); if(ec) ec.classList.toggle('hidden', earningsRange!=='custom');
   renderEarnings();
 });
+const ef=document.getElementById('earn-from'); const et=document.getElementById('earn-to');
+if(ef) ef.addEventListener('change', renderEarnings);
+if(et) et.addEventListener('change', renderEarnings);
