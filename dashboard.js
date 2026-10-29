@@ -1,11 +1,14 @@
 const SESSION_KEY = 'forno99_session';
 const API = (window.API_BASE||'') + '/api/orders';
 
-// Epson TM-m30III printer configuration
+// Epson TM-m30III printer configuration (SOAP/ePOS-Print)
 const PRINTER_IP = '192.168.1.8';
-let epsonDevice = null;
+const PRINTER_URL = 'http://192.168.1.8/cgi-bin/epos/service.cgi';
+const PRINTER_DEV_ID = 'local_printer';
 let printerConnected = false;
 let autoPrintEnabled = true;
+let printedOrders = new Map(); // orderId → {status:'pending'|'printed'|'failed', attempts, error?}
+
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
     if (r.status === 401 && !String(url).includes('/api/login')) {
@@ -43,6 +46,9 @@ const els = {
   resultCount: document.getElementById('result-count'),
   refreshBtn: document.getElementById('refresh-btn'),
   signoutBtn: document.getElementById('signout-btn'),
+  printerSettingsBtn: document.getElementById('printer-settings-btn'),
+  printerSettingsModal: document.getElementById('printer-settings-modal'),
+  printerStatusText: document.getElementById('printer-status-text'),
 };
 
 let orders = [];
@@ -162,110 +168,255 @@ function getFiltered() {
   });
 }
 
-async function printReceipt(order) {
-  if (!navigator.bluetooth) {
-    // Fallback to browser print dialog
-    const items = (order.items || []).map(i => `<tr><td>${i.qty}x ${esc(i.name)}</td><td style="text-align:right">€${(i.qty*i.price).toFixed(2)}</td></tr>`).join('');
-    const html = `<!DOCTYPE html><html><head><title>Receipt</title><style>
-      @page{size:80mm auto;margin:0}
-      body{font-family:'Courier New',monospace;width:80mm;margin:0;padding:16px;color:#111;font-size:16px;font-weight:bold}
-      h3{margin:0;font-size:26px;letter-spacing:1px}
-      h4{margin:4px 0 8px;font-size:14px}
-      .line{border-top:1px dashed #000;margin:12px 0}
-      table{width:100%;border-collapse:collapse}
-      td{padding:6px 0;font-size:13px}
-      .total{font-weight:bold;font-size:20px;margin-top:8px;padding-top:8px;border-top:2px solid #000}
-      .center{text-align:center}
-      .muted{font-size:11px;color:#555}
-    </style></head><body>
-      <h3>FARID KEBAB</h3><h4>Order #${esc(order.order_number)}</h4>
-      <div>${esc(order.customer_name)} — ${esc(order.customer_phone)}</div>
-      <div>Via Leopoldo Galeotti, 51017 Pescia PT</div>
-      <div>${order.order_type}</div>
-      ${order.order_type === 'pickup' && order.pickup_time ? `<div style="font-size:24px;font-weight:900">Pickup: ${esc(order.pickup_time)}</div>` : ''}
-      ${order.notes ? `<div class="line"></div><div>Note: ${esc(order.notes)}</div>` : ''}
-      <div class="line"></div>
-      <table>${items}</table>
-      <div class="total">Total €${Number(order.total).toFixed(2)}</div>
-      <div>Questo scontrino non ha valore fiscale.</div>
-      <div class="muted" style="font-weight:900">Servizio non incluso. Conservare lo scontrino.</div>
-      <div style="height:140px"></div>
-    </body></html>`;
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-    iframe.contentWindow.document.open();
-    iframe.contentWindow.document.write(html);
-    iframe.contentWindow.document.close();
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    setTimeout(() => document.body.removeChild(iframe), 1000);
-    return;
-  }
+// ===== Epson Printer Functions (SOAP/ePOS-Print) =====
+
+function buildReceiptXML(order) {
+  const items = (order.items||[]).map(i =>
+    `<text>${esc(i.name)}   x${i.qty}   €${(i.qty*i.price).toFixed(2)}</text>`
+  ).join('');
+  const notes = order.notes ? `<text>Note: ${esc(order.notes)}</text>` : '';
+  return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+    <text>FARID KEBABBARO</text>
+    <feed />
+    <text>Via Leopoldo Galeotti</text>
+    <text>51017 Pescia PT</text>
+    <feed />
+    <text>Ordine #${esc(order.order_number||order.id)}</text>
+    <text>Data: ${new Date(order.created_at).toLocaleString('it-IT')}</text>
+    <text>Tipo: ${order.order_type==='delivery'?'Consegna':'Ritiro'}</text>
+    ${order.customer_name ? `<text>Cliente: ${esc(order.customer_name)}</text>` : ''}
+    ${order.customer_phone ? `<text>Tel: ${esc(order.customer_phone)}</text>` : ''}
+    ${order.delivery_address ? `<text>Indirizzo: ${esc(order.delivery_address)}</text>` : ''}
+    ${order.delivery_timing==='later' && order.delivery_time ? `<text>Orario: ${esc(order.delivery_time)}</text>` : ''}
+    ${order.order_type==='pickup' && order.pickup_time ? `<text>Ritiro: ${esc(order.pickup_time)}</text>` : ''}
+    <feed />
+    <text>  Prodotto     Qty   Prezzo</text>
+    <feed />
+    ${items}
+    <feed />
+    <text>------------------------------</text>
+    <text>Totale: €${Number(order.total).toFixed(2)}</text>
+    ${notes}
+    <feed />
+    <text>Grazie per l'ordine!</text>
+    <cut type="feed" />
+  </epos-print>`;
+}
+
+function soapPrint(xmlBody) {
+  const soap = `<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Header>
+    <parameter xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+      <devid>${PRINTER_DEV_ID}</devid>
+      <timeout>10000</timeout>
+      <printjobid>order-${Date.now()}</printjobid>
+      </s:Header>
+  <s:Body>
+    ${xmlBody}
+  </s:Body>
+</s:Envelope>`;
+
+  return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'SOAPAction': '""',
+      'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
+    },
+    body: soap
+  });
+}
+
+function initPrinter() {
   try {
-    // 1. Try already-granted devices first
-    let device = null;
-    if (navigator.bluetooth.getDevices) {
-      const devices = await navigator.bluetooth.getDevices();
-      if (devices && devices.length) device = devices[0];
-    }
-    if (!device) {
-      device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [
-        '000018f0-0000-1000-8000-00805f9b34fb',
-        '49535343-fe7d-41aa-a73b-222c547d4140'
-      ]
-      });
-    }
-
-    // 2. Connect to the GATT Server
-    const server = await device.gatt.connect();
-
-    // 3. Locate the Service and Write Characteristic
-    const services = await server.getPrimaryServices();
-    const service = services[0]; 
-    const characteristics = await service.getCharacteristics();
-    const writeCharacteristic = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse);
-
-    if (!writeCharacteristic) {
-      throw new Error('No writable characteristic found on this device.');
-    }
-
-    // 4. Construct the ESC/POS Command Stream
-    const escposData = new Uint8Array([
-      0x1B, 0x40,                             // Initialize
-      0x1B, 0x61, 0x01,                       // Center Align
-      ...new TextEncoder().encode("FARID KEBAB\n\n"),
-      0x1B, 0x61, 0x00,                       // Left Align
-      ...new TextEncoder().encode(`Order #: ${order.order_number}\n`),
-      ...new TextEncoder().encode(`Type: ${order.order_type}\n`),
-      ...(order.order_type === 'pickup' && order.pickup_time ? [ ...new TextEncoder().encode(`Pickup: ${order.pickup_time}\n`) ] : []),
-      ...new TextEncoder().encode(`Name: ${order.customer_name}\n`),
-      ...new TextEncoder().encode("Via Leopoldo Galeotti, 51017 Pescia PT\n"),
-      ...new TextEncoder().encode("--------------------------------\n"),
-      ...order.items.flatMap(item => 
-        Array.from(new TextEncoder().encode(`${item.qty}x ${item.name} - €${item.price}\n`))
-      ),
-      ...new TextEncoder().encode("--------------------------------\n"),
-      ...new TextEncoder().encode("Questo scontrino non ha valore fiscale.\n\n\n"),
-      0x1D, 0x56, 0x42, 0x00                   // Cut Paper
-    ]);
-
-    // 5. Send payload to printer
-    await writeCharacteristic.writeValue(escposData);
-    console.log('Order sent to printer successfully.');
-
-  } catch (error) {
-    console.error('Bluetooth Stampa Error:', error);
-    alert('Bluetooth print failed: ' + (error && error.message ? error.message : error));
+    printerConnected = true;
+    updatePrinterStatusUI(true);
+    return true;
+  } catch(e) {
+    printerConnected = false;
+    updatePrinterStatusUI(false);
+    showToast('Errore inizializzazione stampante: ' + e.message);
+    return false;
   }
 }
+
+function updatePrinterStatusUI(connected) {
+  const indicator = document.getElementById('printer-status-indicator');
+  if (!indicator) return;
+  indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
+  indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
+  if (els.printerStatusText) {
+    els.printerStatusText.textContent = connected ? 'Connessa' : 'Non connessa';
+    els.printerStatusText.style.color = connected ? '#2e7d32' : '#c0392b';
+  }
+}
+
+function testPrinterConnection() {
+  const testXML = `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+    <text>Test di connessione stampante</text>
+    <feed />
+    <text>Indirizzo: ${PRINTER_IP}</text>
+    <text>Ora: ${new Date().toLocaleString('it-IT')}</text>
+    <text>Stato: OK</text>
+    <cut type="feed" />
+  </epos-print>`;
+
+  soapPrint(testXML).then(res => res.text()).then(text => {
+    const success = /success\s*=\s*"\s*(1|true)\s*"/.test(text);
+    if (success) {
+      showToast('Stampante connessa correttamente');
+      printerConnected = true;
+      updatePrinterStatusUI(true);
+    } else {
+      const codeMatch = text.match(/code\s*=\s*"\s*(\S*)\s*"/);
+      showToast('Errore connessione stampante: ' + (codeMatch ? codeMatch[1] : 'sconosciuto'));
+      printerConnected = false;
+      updatePrinterStatusUI(false);
+    }
+  }).catch(err => {
+    console.error('Printer test error:', err);
+    showToast('Errore connessione stampante');
+    printerConnected = false;
+    updatePrinterStatusUI(false);
+  });
+}
+
+function printOrder(order) {
+  const id = String(order.id);
+  const existing = printedOrders.get(id);
+  if (existing && existing.status === 'printed') {
+    showToast('Ordine gi\u00e0 stampato');
+    return;
+  }
+
+  printedOrders.set(id, { status: 'pending', attempts: (existing ? existing.attempts : 0) + 1 });
+  renderOrders();
+
+  try {
+    const xmlBody = buildReceiptXML(order);
+    soapPrint(xmlBody).then(res => res.text()).then(text => {
+      const success = /success\s*=\s*"\s*(1|true)\s*"/.test(text);
+      if (success) {
+        printedOrders.set(id, { status: 'printed', attempts: (existing ? existing.attempts : 0) + 1 });
+        showToast('Ricevuta stampata');
+        renderOrders();
+      } else {
+        const codeMatch = text.match(/code\s*=\s*"\s*(\S*)\s*"/);
+        printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: codeMatch ? codeMatch[1] : 'unknown' });
+        showToast('Errore stampa ricevuta');
+        renderOrders();
+      }
+    }).catch(err => {
+      console.error('Print error:', err);
+      printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: err.message });
+      showToast('Errore connessione stampante');
+      renderOrders();
+    });
+  } catch(e) {
+    console.error('Print setup error:', e);
+    printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: e.message });
+    showToast('Errore preparazione stampa');
+    renderOrders();
+  }
+}
+
+function printReceiptEpson(order) {
+  printOrder(order);
+}
+
+function setStatus(id, status, btn) {
+  const o = orders.find(x => String(x.id) === String(id));
+  if (!o || o._saving) return;
+  o._saving = true;
+  const prev = o.status;
+  o.status = status;
+  renderStats();
+  renderOrders();
+  renderEarnings();
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  saveStatus(id, status).then(() => {
+    o._saving = false;
+    showToast('Ordine ' + o.order_number + ' \u2192 ' + status);
+    if (status === 'preparing' && autoPrintEnabled) {
+      printOrder(o);
+    }
+    if (currentStatus !== 'all') {
+      currentStatus = status;
+      els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      const nt = els.filterTabs.querySelector('.filter-tab[data-status="' + status + '"]');
+      if (nt) nt.classList.add('active');
+      renderOrders();
+    }
+  }).catch(() => {
+    o._saving = false;
+    o.status = prev;
+    renderStats();
+    renderOrders();
+    renderEarnings();
+    if (btn) { btn.disabled = false; }
+    showToast('Errore aggiornamento');
+  });
+}
+
+function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
+function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
+
+function loadAndRender() {
+  const banner = document.getElementById('conn-banner');
+  loadOrders().then(o => {
+    if (banner) banner.classList.remove('show');
+    const seen = new Map();
+    o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
+    o = Array.from(seen.values());
+    const newOnes = o.filter(x => x.status === 'new' && !modalShownIds.has(x.id));
+    const modal = document.getElementById('neworder-modal');
+    if (newOnes.length && (!modal || modal.classList.contains('hidden'))) {
+      const firstNew = newOnes[0];
+      modalShownIds.add(firstNew.id);
+      showNewOrderModal(firstNew);
+    }
+    o.forEach(x => knownIds.add(x.id));
+    orders = o;
+    renderStats();
+    renderOrders();
+    renderEarnings();
+  }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
+}
+
+function showNewOrderModal(o) {
+  selectedNewOrder = o;
+  const idEl = document.getElementById('no-id');
+  if (idEl) idEl.textContent = 'Ordine #' + (o.order_number || o.id);
+  const body = document.getElementById('no-body');
+  if (body) {
+    const items = (o.items || []).map(i => '<li>' + i.qty + '\u00d7 ' + esc(i.name) + ' \u20ac' + (i.qty * i.price).toFixed(2) + '</li>').join('');
+    body.innerHTML = '<p><b>' + esc(o.customer_name) + '</b> \u2014 ' + esc(o.customer_phone) + '</p>' +
+      '<p>' + (o.order_type === 'delivery' ? 'Consegna' : 'Ritiro') + (o.order_type === 'delivery' && o.delivery_timing === 'later' ? ' alle ' + esc(o.delivery_time) : (o.order_type === 'pickup' && o.pickup_time ? ' alle ' + esc(o.pickup_time) : '')) + '</p>' +
+      '<p>Ordine effettuato: ' + new Date(o.created_at).toLocaleString('it-IT') + '</p>' +
+      (o.delivery_address ? '<p>Indirizzo: ' + esc(o.delivery_address) + '</p>' : '') +
+      (o.notes ? '<p><b>Note:</b> ' + esc(o.notes) + '</p>' : '') +
+      '<ul>' + items + '</ul>' +
+      '<p><b>Totale: \u20ac' + Number(o.total).toFixed(2) + '</b></p>';
+  }
+  const m = document.getElementById('neworder-modal');
+  if (m) m.classList.remove('hidden');
+}
+
+let knownIds = new Set();
+let unacceptedNew = new Set();
+let alarmTimer = null;
+let alarmAudio = null;
+function playAlarm() { try { if (!alarmAudio) { alarmAudio = new Audio('ali_kebab_real_siren_alert.wav'); alarmAudio.loop = true; } alarmAudio.play(); } catch(e){ console.error('alarm', e); } }
+function stopAlarm() { if (alarmAudio) { alarmAudio.pause(); alarmAudio.currentTime = 0; } }
+let audioCtx = null;
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { audioCtx = null; }
+  return audioCtx;
+}
+document.addEventListener('click', ensureAudio, { once: false });
+document.addEventListener('keydown', ensureAudio, { once: false });
 
 function renderOrders() {
   const filtered = getFiltered().sort((a, b) => {
@@ -286,285 +437,62 @@ function renderOrders() {
   filtered.forEach(o => {
     const card = document.createElement('div');
     const waiting = o.status === 'new' && (Date.now() - new Date(o.created_at).getTime()) > 300000;
+    const pinfo = printedOrders.get(String(o.id));
+    const pstatus = pinfo ? pinfo.status : null;
+    let pbadge = '';
+    if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Stampato">\u2705</span>';
+    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="Stampa fallita - clicca per riprovare" onclick="event.stopPropagation(); printOrder(' + JSON.stringify(o) + ')">\u274c</span>';
+    else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Stampa in corso">\ud83d\uddf0</span>';
+    else if (o.status === 'new') pbadge = '<span class="print-badge pending" title="Nuovo - stampa all\'accettazione">\ud83d\udce9</span>';
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
-    // disable actions while saving
     if (o._saving) card.classList.add('saving');
     card.innerHTML = `
       <div class="order-head">
         <div class="order-number">${esc(o.order_number)} <span class="order-id">ID: ${o.id}</span></div>
         <span class="order-status ${statusClass(o.status)}">${o.status}</span>
+        ${pbadge}
       </div>
       <div class="order-meta">
-        <span>👤 ${esc(o.customer_name)}</span>
-        <span>📞 ${esc(o.customer_phone)}</span>
-        <span>🚚 ${o.order_type}</span>
-        ${o.delivery_address ? `<span>📍 ${esc(o.delivery_address)}</span>` : ''}
-        ${o.order_type === 'delivery' && o.delivery_timing ? `<span>⏱ Delivery: ${esc(o.delivery_timing === 'later' ? (o.delivery_time || '') : 'Now')}</span>` : ''}
-        ${o.order_type === 'pickup' && o.pickup_time ? `<span>⏱ Pickup: ${esc(o.pickup_time)}</span>` : ''}
-        <span>⏱ ${timeAgo(o.created_at)}</span>
+        <span>\ud83d\udc46 ${esc(o.customer_name)}</span>
+        <span>\ud83d\udc4f ${esc(o.customer_phone)}</span>
+        <span>\ud83d\ude9a ${o.order_type}</span>
+        ${o.delivery_address ? '<span>\ud83d\udccd ' + esc(o.delivery_address) + '</span>' : ''}
+        ${o.order_type === 'delivery' && o.delivery_timing ? '<span>\u23f1 Delivery: ' + esc(o.delivery_timing === 'later' ? (o.delivery_time || '') : 'Now') + '</span>' : ''}
+        ${o.order_type === 'pickup' && o.pickup_time ? '<span>\u23f1 Ritiro: ' + esc(o.pickup_time) + '</span>' : ''}
+        <span>\u23f1 ' + timeAgo(o.created_at) + '</span>
       </div>
-      ${o.notes ? `<div class="order-meta"><span>📝 ${esc(o.notes)}</span></div>` : ''}
-      <ul class="order-items">${(o.items || []).map(i => `<li>${i.qty}× ${esc(i.name)} <span style="float:right">€${(i.qty * i.price).toFixed(2)}</span></li>`).join('')}</ul>
+      ${o.notes ? '<div class="order-meta"><span>\ud83d\udcdd ' + esc(o.notes) + '</span></div>' : ''}
+      <ul class="order-items">${(o.items || []).map(i => '<li>' + i.qty + '\u00d7 ' + esc(i.name) + ' <span style="float:right">\u20ac' + (i.qty * i.price).toFixed(2) + '</span></li>').join('')}</ul>
       <div class="order-foot">
-        <div class="order-total">€${Number(o.total).toFixed(2)}</div>
+        <div class="order-total">\u20ac' + Number(o.total).toFixed(2) + '</div>
         <div class="order-actions">
           <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
           <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Stampa</button>
-          ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>` : ''}
-          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>` : ''}
-          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}">Segna pronto</button>` : ''}
-          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>` : ''}
+          ${o.status === 'new' ? '<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>' : ''}
+          ${o.status === 'accepted' ? '<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>' : ''}
+          ${o.status === 'preparing' ? '<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}">Segna pronto</button>' : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? '<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>' : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
   });
 }
 
-function setStatus(id, status, btn) {
-  const o = orders.find(x => String(x.id) === String(id));
-  if (!o || o._saving) return;
-  o._saving = true;
-  const prev = o.status;
-  o.status = status;
-  unacceptedNew.delete(o.id);
-  if (!unacceptedNew.size) { if (alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; } stopAlarm(); }
-  renderStats();
-  renderOrders();
-  renderEarnings();
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
-  saveStatus(id, status).then(() => {
-    o._saving = false;
-    showToast(`Ordine ${o.order_number} → ${status}`);
-    if (status === 'preparing' && autoPrintEnabled) { printReceiptEpson(o); }
-    if (currentStatus !== 'all') {
-      currentStatus = status;
-      els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-      const nt = els.filterTabs.querySelector('.filter-tab[data-status="'+status+'"]');
-      if (nt) nt.classList.add('active');
-      renderOrders();
-    }
-  }).catch(() => { o._saving = false; o.status = prev; renderStats(); renderOrders(); renderEarnings(); if (btn) { btn.disabled = false; } showToast('Errore aggiornamento'); });
-}
-
-function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
-function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
-
-function showNewOrderModal(o) {
-  selectedNewOrder = o;
-  const idEl = document.getElementById('no-id');
-  if (idEl) idEl.textContent = 'Ordine #' + (o.order_number||o.id);
-  const body = document.getElementById('no-body');
-  if (body) {
-    const items = (o.items||[]).map(i=>`<li>${i.qty}× ${esc(i.name)} — €${(i.qty*i.price).toFixed(2)}</li>`).join('');
-    body.innerHTML = `<p><b>${esc(o.customer_name)}</b> — ${esc(o.customer_phone)}</p>
-      <p>${o.order_type==='delivery'?'Delivery':'Ritiro'} ${o.order_type==='delivery'&&(o.delivery_timing==='later')?('alle '+esc(o.delivery_time)):(o.order_type==='pickup'&&o.pickup_time?'alle '+esc(o.pickup_time):'')}</p>
-      <p>Ordine effettuato: ${new Date(o.created_at).toLocaleString('it-IT')}</p>
-      ${o.delivery_address?`<p>Indirizzo: ${esc(o.delivery_address)}</p>`:''}
-      ${o.notes?`<p><b>Note:</b> ${esc(o.notes)}</p>`:''}
-      <ul>${items}</ul>
-      <p><b>Totale: €${Number(o.total).toFixed(2)}</b></p>`;
-  }
-  const m = document.getElementById('neworder-modal');
-  if (m) m.classList.remove('hidden');
-}
-const btnAccept = document.getElementById('no-accept');
-const btnReject = document.getElementById('no-reject');
-if (btnAccept) btnAccept.addEventListener('click', () => {
-  if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'preparing'); const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden'); }
-});
-if (btnReject) btnReject.addEventListener('click', () => {
-  if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'rejected'); const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden'); }
-});
-const btnClose = document.getElementById('no-close');
-if (btnClose) btnClose.addEventListener('click', () => {
-  const m=document.getElementById('neworder-modal'); if(m) m.classList.add('hidden');
-});
-const modalEl = document.getElementById('neworder-modal');
-if (modalEl) modalEl.addEventListener('click', (e) => {
-  if (e.target === modalEl) modalEl.classList.add('hidden');
-});
-
-function initAuth() {
-  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); }
-  else showLogin();
-}
-
-let knownIds = new Set();
-let unacceptedNew = new Set();
-let alarmTimer = null;
-let alarmAudio = null;
-function playAlarm() { try { if (!alarmAudio) { alarmAudio = new Audio('ali_kebab_real_siren_alert.wav'); alarmAudio.loop = true; } alarmAudio.play(); } catch(e){ console.error('alarm',e); } }
-function stopAlarm() { if (alarmAudio) { alarmAudio.pause(); alarmAudio.currentTime = 0; } }
-let audioCtx = null;
-function ensureAudio() {
-  if (audioCtx) return audioCtx;
-  try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ audioCtx=null; }
-  return audioCtx;
-}
-document.addEventListener('click', ensureAudio, {once:false});
-document.addEventListener('keydown', ensureAudio, {once:false});
-
-function loadAndRender() {
-  const banner = document.getElementById('conn-banner');
-  loadOrders().then(o => {
-    if (banner) banner.classList.remove('show');
-    // deduplicate by order id (keep first occurrence)
-    const seen = new Map();
-    o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
-    o = Array.from(seen.values());
-    const newOnes = o.filter(x => x.status === 'new' && !modalShownIds.has(x.id));
-    const modal = document.getElementById('neworder-modal');
-    if (newOnes.length && (!modal || modal.classList.contains('hidden'))) {
-      const firstNew = newOnes[0];
-      modalShownIds.add(firstNew.id);
-      showNewOrderModal(firstNew);
-    }
-    o.forEach(x => knownIds.add(x.id));
-    // track unaccepted new orders
-    unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
-    if (unacceptedNew.size && !alarmTimer) {
-      playAlarm();
-      alarmTimer = setInterval(()=>{ if(unacceptedNew.size) playAlarm(); else { clearInterval(alarmTimer); alarmTimer=null; } }, 5000);
-    }
-    if (!unacceptedNew.size) { if (alarmTimer) { clearInterval(alarmTimer); alarmTimer=null; } stopAlarm(); }
-    orders = o; renderStats(); renderOrders(); renderEarnings();
-  }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
-}
-
-els.signoutBtn.addEventListener('click', () => {
-  const t = sessionStorage.getItem('forno99_token');
-  fetch((window.API_BASE||'') + '/api/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}}).finally(()=>{
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('forno99_token');
-    showLogin();
-  });
-});
-
-// ===== Epson Printer Functions =====
-function initPrinter() {
-  if (typeof window.epson === 'undefined' || typeof window.epson.ePOSPrint === 'undefined') {
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-    showToast('SDK ePOS-Print non caricato. Verifica connessione internet.');
-    return false;
-  }
-  try {
-    epsonDevice = new window.epson.ePOSPrint.Device();
-    epsonDevice.ethernet = window.epson.ePOSPrint.Ethernet.build(PRINTER_IP, 80);
-    printerConnected = true;
-    updatePrinterStatusUI(true);
-    return true;
-  } catch(e) {
-    console.error('Printer init error:', e);
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-    showToast('Errore inizializzazione stampante: ' + e.message);
-    return false;
-  }
-}
-
-function updatePrinterStatusUI(connected) {
-  const indicator = document.getElementById('printer-status-indicator');
-  if (!indicator) return;
-  indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
-  indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
-}
-
-function testPrinterConnection() {
-  if (!printerConnected || !epsonDevice) {
-    showToast('Stampante non inizializzata. Riprovo...');
-    initPrinter();
-    return;
-  }
-  try {
-    const ctx = new window.epson.ePOSPrint.Context();
-    ctx.page = window.epson.ePOSPrint.Page.build(window.epson.ePOSPrint.Page.TYPE.RECEIPT_80MM);
-    ctx.add('Test di connessione stampante\\n');
-    ctx.add('Indirizzo: ' + PRINTER_IP + '\\n');
-    ctx.add('Ora: ' + new Date().toLocaleString('it-IT') + '\\n');
-    ctx.add('Stato: OK\\n');
-    ctx.add('--------------------------------\\n');
-    epsonDevice.send(ctx).then(() => {
-      showToast('Stampante connessa correttamente');
-      printerConnected = true;
-      updatePrinterStatusUI(true);
-    }).catch(err => {
-      console.error('Printer connection test failed:', err);
-      showToast('Errore connessione stampante: controlla IP e rete');
-      printerConnected = false;
-      updatePrinterStatusUI(false);
-    });
-  } catch(e) {
-    console.error('Printer test error:', e);
-    showToast('Errore test stampante: ' + e.message);
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-  }
-}
-
-function printReceiptEpson(order) {
-  if (!printerConnected || !epsonDevice) {
-    showToast('Stampante non disponibile per la stampa');
-    return;
-  }
-  try {
-    const ctx = new window.epson.ePOSPrint.Context();
-    ctx.page = window.epson.ePOSPrint.Page.build(window.epson.ePOSPrint.Page.TYPE.RECEIPT_80MM);
-
-    ctx.add('FARID KEBABBARO\\n');
-    ctx.add('Via Leopoldo Galeotti\\n');
-    ctx.add('51017 Pescia PT\\n');
-    ctx.add('------------------------------\\n');
-    ctx.add('Ordine #' + (order.order_number||order.id) + '\\n');
-    ctx.add('Data: ' + new Date(order.created_at).toLocaleString('it-IT') + '\\n');
-    ctx.add('Tipo: ' + (order.order_type==='delivery'?'Consegna':'Ritiro') + '\\n');
-    if (order.customer_name) ctx.add('Cliente: ' + order.customer_name + '\\n');
-    if (order.customer_phone) ctx.add('Tel: ' + order.customer_phone + '\\n');
-    if (order.delivery_address) ctx.add('Indirizzo: ' + order.delivery_address + '\\n');
-    if (order.delivery_timing==='later' && order.delivery_time) ctx.add('Orario: ' + order.delivery_time + '\\n');
-    if (order.order_type==='pickup' && order.pickup_time) ctx.add('Ritiro: ' + order.pickup_time + '\\n');
-    ctx.add('------------------------------\\n');
-    ctx.add('  Prodotto     Qty   Prezzo\\n');
-    (order.items||[]).forEach(i => {
-      ctx.add('  ' + i.name + '   x' + i.qty + '   €' + (i.qty*i.price).toFixed(2) + '\\n');
-    });
-    ctx.add('------------------------------\\n');
-    ctx.add('  Totale: €' + Number(order.total).toFixed(2) + '\\n');
-    if (order.notes) ctx.add('Note: ' + order.notes + '\\n');
-    ctx.add('------------------------------\\n');
-    ctx.add('  Grazie per l ordine!\\n');
-    ctx.add('------------------------------\\n');
-    ctx.add('\\n\\n');
-
-    epsonDevice.send(ctx).then(() => {
-      showToast('Ricevuta stampata');
-    }).catch(err => {
-      console.error('Print error:', err);
-      showToast('Errore stampa ricevuta');
-      printerConnected = false;
-      updatePrinterStatusUI(false);
-    });
-  } catch(e) {
-    console.error('Print setup error:', e);
-    showToast('Errore preparazione stampa');
-  }
-}
-
 els.loginForm.addEventListener('submit', e => {
   e.preventDefault();
   const user = document.getElementById('login-email').value.trim();
   const pass = document.getElementById('login-password').value;
-  fetch((window.API_BASE||'') + '/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:user,password:pass})}).then(r=>{
-    if(!r.ok) throw new Error('bad');
+  fetch((window.API_BASE || '') + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) }).then(r => {
+    if (!r.ok) throw new Error('bad');
     return r.json();
-  }).then(d=>{
-    sessionStorage.setItem(SESSION_KEY,'1');
+  }).then(d => {
+    sessionStorage.setItem(SESSION_KEY, '1');
     sessionStorage.setItem('forno99_token', d.token);
     els.loginError.classList.add('hidden');
     showDashboard();
     loadAndRender();
     initPrinter();
-  }).catch(()=>{
+  }).catch(() => {
     els.loginError.textContent = 'Nome utente o password non validi.';
     els.loginError.classList.remove('hidden');
   });
@@ -572,7 +500,7 @@ els.loginForm.addEventListener('submit', e => {
 
 els.signoutBtn.addEventListener('click', () => {
   const t = sessionStorage.getItem('forno99_token');
-  fetch((window.API_BASE||'') + '/api/logout', {method:'POST', headers:{'Authorization':'Bearer '+t}}).finally(()=>{
+  fetch((window.API_BASE || '') + '/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }).finally(() => {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem('forno99_token');
     showLogin();
@@ -600,13 +528,12 @@ if (els.dateFilter) els.dateFilter.addEventListener('change', e => { setDateFilt
 
 if (els.applyRange) els.applyRange.addEventListener('click', () => {
   if (els.dateFrom.value && els.dateTo.value && els.dateFrom.value > els.dateTo.value) { showToast('Data fine precedente alla data inizio'); return; }
-  if (els.selectedRange) els.selectedRange.textContent = (els.dateFrom.value || '') + ' → ' + (els.dateTo.value || '');
+  if (els.selectedRange) els.selectedRange.textContent = (els.dateFrom.value || '') + ' \u2192 ' + (els.dateTo.value || '');
   renderOrders();
 });
 if (els.cancelRange) els.cancelRange.addEventListener('click', () => {
   if (els.customPanel) els.customPanel.classList.add('hidden');
   dateFilter = 'today';
-  // = '📅 Oggi';
   if (els.dateFrom) els.dateFrom.value = '';
   if (els.dateTo) els.dateTo.value = '';
   if (els.selectedRange) els.selectedRange.textContent = '';
@@ -635,14 +562,14 @@ els.orderList.addEventListener('click', e => {
   const action = btn.dataset.action;
   if (action === 'status') {
     selectedOrder = orders.find(x => String(x.id) === String(id));
-    if (selectedOrder) els.statusOrderInfo.textContent = `${selectedOrder.order_number} — ${selectedOrder.customer_name}`;
+    if (selectedOrder) els.statusOrderInfo.textContent = selectedOrder.order_number + ' \u2014 ' + selectedOrder.customer_name;
     els.statusModal.classList.remove('hidden');
   } else if (action === 'accept') setStatus(id, 'preparing', btn);
   else if (action === 'reject') setStatus(id, 'rejected', btn);
   else if (action === 'preparing') setStatus(id, 'preparing', btn);
   else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery', btn); }
   else if (action === 'complete') setStatus(id, 'completed', btn);
-  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printReceiptEpson(o); }
+  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printOrder(o); }
 });
 
 if (els.statusModal) {
@@ -673,11 +600,11 @@ setInterval(() => {
 window.initPrinter = initPrinter;
 window.testPrinterConnection = testPrinterConnection;
 window.printReceiptEpson = printReceiptEpson;
-
+window.printOrder = printOrder;
 
 // Toggle accepting orders
-const toggleBtn=document.createElement("button");toggleBtn.textContent="Toggle Orders";toggleBtn.className="btn btn-ghost btn-sm";toggleBtn.style.position="fixed";toggleBtn.style.bottom="20px";toggleBtn.style.right="20px";toggleBtn.style.zIndex="9999";document.body.appendChild(toggleBtn);
-toggleBtn.addEventListener("click",async()=>{ if(!confirm("Sei sicuro?")) return;const t=sessionStorage.getItem("forno99_token");const r=await fetch((window.API_BASE||"")+"/api/settings",{headers:{Authorization:"Bearer "+t}});const d=await r.json();const next=d.accepting_orders==="false"?"true":"false";await fetch((window.API_BASE||"")+"/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json","Authorization":"Bearer "+t},body:JSON.stringify({key:"accepting_orders",value:next})});});
+const toggleBtn = document.createElement("button"); toggleBtn.textContent = "Toggle Orders"; toggleBtn.className = "btn btn-ghost btn-sm"; toggleBtn.style.position = "fixed"; toggleBtn.style.bottom = "20px"; toggleBtn.style.right = "20px"; toggleBtn.style.zIndex = "9999"; document.body.appendChild(toggleBtn);
+toggleBtn.addEventListener("click", async () => { if (!confirm("Sei sicuro?")) return; const t = sessionStorage.getItem("forno99_token"); const r = await fetch((window.API_BASE || "") + "/api/settings", { headers: { Authorization: "Bearer " + t } }); const d = await r.json(); const next = d.accepting_orders === "false" ? "true" : "false"; await fetch((window.API_BASE || "") + "/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t }, body: JSON.stringify({ key: "accepting_orders", value: next }) }); });
 
 const earningsTabs = document.getElementById('earnings-tabs');
 if (earningsTabs) earningsTabs.addEventListener('click', e => {
@@ -686,10 +613,23 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
   earningsTabs.querySelectorAll('.earnings-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   earningsRange = tab.dataset.range;
-  const ec=document.getElementById('earn-custom'); if(ec) ec.classList.toggle('hidden', earningsRange!=='custom');
+  const ec = document.getElementById('earn-custom'); if (ec) ec.classList.toggle('hidden', earningsRange !== 'custom');
   renderEarnings();
 });
-const ef=document.getElementById('earn-from'); const et=document.getElementById('earn-to');
-if(ef) ef.addEventListener('change', renderEarnings);
-if(et) et.addEventListener('change', renderEarnings);
+const ef = document.getElementById('earn-from'); const et = document.getElementById('earn-to');
+if (ef) ef.addEventListener('change', renderEarnings);
+if (et) et.addEventListener('change', renderEarnings);
 initAuth();
+
+// Printer settings modal handlers
+if (els.printerSettingsBtn) els.printerSettingsBtn.addEventListener('click', () => {
+  if (els.printerSettingsModal) els.printerSettingsModal.classList.remove('hidden');
+});
+const printerSettingsClose = document.getElementById('printer-settings-close');
+if (printerSettingsClose) printerSettingsClose.addEventListener('click', () => {
+  if (els.printerSettingsModal) els.printerSettingsModal.classList.add('hidden');
+});
+const printerSettingsModal = document.getElementById('printer-settings-modal');
+if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => {
+  if (e.target === printerSettingsModal) printerSettingsModal.classList.add('hidden');
+});
