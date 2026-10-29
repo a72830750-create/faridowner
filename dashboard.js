@@ -442,6 +442,12 @@ els.signoutBtn.addEventListener('click', () => {
 
 // ===== Epson Printer Functions =====
 function initPrinter() {
+  if (typeof window.ePOSPrint === 'undefined') {
+    printerConnected = false;
+    updatePrinterStatusUI(false);
+    showToast('SDK ePOS-Print non caricato. Verifica connessione internet.');
+    return false;
+  }
   try {
     epsonDevice = new window.ePOSPrint.Device();
     epsonDevice.ethernet = window.ePOSPrint.Ethernet.build(PRINTER_IP, 80);
@@ -452,6 +458,7 @@ function initPrinter() {
     console.error('Printer init error:', e);
     printerConnected = false;
     updatePrinterStatusUI(false);
+    showToast('Errore inizializzazione stampante: ' + e.message);
     return false;
   }
 }
@@ -464,28 +471,35 @@ function updatePrinterStatusUI(connected) {
 }
 
 function testPrinterConnection() {
-  if (!epsonDevice) {
-    showToast('Stampante non inizializzata. Inizializzazione...');
+  if (!printerConnected || !epsonDevice) {
+    showToast('Stampante non inizializzata. Riprovo...');
     initPrinter();
     return;
   }
-  const ctx = new window.ePOSPrint.Context();
-  ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
-  ctx.add('Test di connessione stampante\\n');
-  ctx.add('Indirizzo: ' + PRINTER_IP + '\\n');
-  ctx.add('Ora: ' + new Date().toLocaleString('it-IT') + '\\n');
-  ctx.add('Stato: Connesso\\n');
-  ctx.add('--------------------------------\\n');
-  epsonDevice.send(ctx).then(() => {
-    showToast('Stampante connessa correttamente');
-    printerConnected = true;
-    updatePrinterStatusUI(true);
-  }).catch(err => {
-    console.error('Printer connection test failed:', err);
-    showToast('Errore connessione stampante');
+  try {
+    const ctx = new window.ePOSPrint.Context();
+    ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
+    ctx.add('Test di connessione stampante\\n');
+    ctx.add('Indirizzo: ' + PRINTER_IP + '\\n');
+    ctx.add('Ora: ' + new Date().toLocaleString('it-IT') + '\\n');
+    ctx.add('Stato: OK\\n');
+    ctx.add('--------------------------------\\n');
+    epsonDevice.send(ctx).then(() => {
+      showToast('Stampante connessa correttamente');
+      printerConnected = true;
+      updatePrinterStatusUI(true);
+    }).catch(err => {
+      console.error('Printer connection test failed:', err);
+      showToast('Errore connessione stampante: controlla IP e rete');
+      printerConnected = false;
+      updatePrinterStatusUI(false);
+    });
+  } catch(e) {
+    console.error('Printer test error:', e);
+    showToast('Errore test stampante: ' + e.message);
     printerConnected = false;
     updatePrinterStatusUI(false);
-  });
+  }
 }
 
 function printReceiptEpson(order) {
