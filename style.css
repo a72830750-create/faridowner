@@ -133,6 +133,8 @@ body {
 .topbar-actions { display: flex; gap: 8px; }
 .topbar-actions .btn { color: #fff; border-color: rgba(255,255,255,.5); }
 .topbar-actions .btn:hover { background: rgba(255,255,255,.15); border-color: #fff; }
+/* Upload picturr.jpg to GitHub, then uncomment and set URL below on .topbar:
+   background-image: url('https://cdn.jsdelivr.net/gh/a72830750-create/customer-kebab@main/picturr.jpg'); */
 .topbar-printer { display: flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.3); }
 .printer-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .printer-status.connected { background: #2e7d32; box-shadow: 0 0 6px #2e7d32; }
