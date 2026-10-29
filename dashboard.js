@@ -334,7 +334,7 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     showToast(`Ordine ${o.order_number} → ${status}`);
-    if (status === 'preparing' && autoPrintEnabled) { printReceipt(o); }
+    if (status === 'preparing' && autoPrintEnabled) { printReceiptEpson(o); }
     if (currentStatus !== 'all') {
       currentStatus = status;
       els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -483,7 +483,7 @@ function testPrinterConnection() {
   });
 }
 
-function printReceipt(order) {
+function printReceiptEpson(order) {
   if (!printerConnected || !epsonDevice) {
     showToast('Stampante non disponibile per la stampa');
     return;
