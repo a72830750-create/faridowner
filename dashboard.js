@@ -442,15 +442,15 @@ els.signoutBtn.addEventListener('click', () => {
 
 // ===== Epson Printer Functions =====
 function initPrinter() {
-  if (typeof window.ePOSPrint === 'undefined') {
+  if (typeof window.epson === 'undefined' || typeof window.epson.ePOSPrint === 'undefined') {
     printerConnected = false;
     updatePrinterStatusUI(false);
     showToast('SDK ePOS-Print non caricato. Verifica connessione internet.');
     return false;
   }
   try {
-    epsonDevice = new window.ePOSPrint.Device();
-    epsonDevice.ethernet = window.ePOSPrint.Ethernet.build(PRINTER_IP, 80);
+    epsonDevice = new window.epson.ePOSPrint.Device();
+    epsonDevice.ethernet = window.epson.ePOSPrint.Ethernet.build(PRINTER_IP, 80);
     printerConnected = true;
     updatePrinterStatusUI(true);
     return true;
@@ -477,8 +477,8 @@ function testPrinterConnection() {
     return;
   }
   try {
-    const ctx = new window.ePOSPrint.Context();
-    ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
+    const ctx = new window.epson.ePOSPrint.Context();
+    ctx.page = window.epson.ePOSPrint.Page.build(window.epson.ePOSPrint.Page.TYPE.RECEIPT_80MM);
     ctx.add('Test di connessione stampante\\n');
     ctx.add('Indirizzo: ' + PRINTER_IP + '\\n');
     ctx.add('Ora: ' + new Date().toLocaleString('it-IT') + '\\n');
@@ -508,8 +508,8 @@ function printReceiptEpson(order) {
     return;
   }
   try {
-    const ctx = new window.ePOSPrint.Context();
-    ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
+    const ctx = new window.epson.ePOSPrint.Context();
+    ctx.page = window.epson.ePOSPrint.Page.build(window.epson.ePOSPrint.Page.TYPE.RECEIPT_80MM);
 
     ctx.add('FARID KEBABBARO\\n');
     ctx.add('Via Leopoldo Galeotti\\n');
