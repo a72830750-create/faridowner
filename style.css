@@ -107,34 +107,17 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
+  background: rgba(245,239,230,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
-  position: relative;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  /* TODO: Upload WhatsApp Image to GitHub, then uncomment and set URL below:
-     background-image: url('https://cdn.jsdelivr.net/gh/a72830750-create/epos-sdk@main/WhatsApp%20Image%202026-10-29%20at%2017..jpg'); */
 }
-.topbar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.35) 80%, rgba(0,0,0,0) 100%);
-  z-index: 0;
-}
-.topbar-brand, .topbar-title, .logo, .topbar-actions, .topbar button {
-  position: relative;
-  z-index: 1;
-}
-.logo { font-weight: 700; font-size: 18px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
-.topbar-title { color: #fff; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.topbar-brand { display: flex; align-items: center; gap: 12px; }
+.logo { font-weight: 700; font-size: 18px; background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.topbar-title { color: var(--muted); font-size: 14px; }
 .topbar-actions { display: flex; gap: 8px; }
-.topbar-actions .btn { color: #fff; border-color: rgba(255,255,255,.5); }
-.topbar-actions .btn:hover { background: rgba(255,255,255,.15); border-color: #fff; }
-/* Upload picturr.jpg to GitHub, then uncomment and set URL below on .topbar:
-   background-image: url('https://cdn.jsdelivr.net/gh/a72830750-create/customer-kebab@main/picturr.jpg'); */
 .topbar-printer { display: flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.3); }
 .printer-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .printer-status.connected { background: #2e7d32; box-shadow: 0 0 6px #2e7d32; }
