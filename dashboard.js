@@ -47,6 +47,7 @@ const els = {
 
 let orders = [];
 let selectedNewOrder = null;
+let modalShownIds = new Set();
 let currentStatus = 'new';
 let dateFilter = 'today';
 let searchQuery = '';
@@ -411,9 +412,13 @@ function loadAndRender() {
     const seen = new Map();
     o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
     o = Array.from(seen.values());
-    const newOnes = o.filter(x => x.status === 'new');
+    const newOnes = o.filter(x => x.status === 'new' && !modalShownIds.has(x.id));
     const modal = document.getElementById('neworder-modal');
-    if (newOnes.length && (!modal || modal.classList.contains('hidden'))) { showNewOrderModal(newOnes[0]); }
+    if (newOnes.length && (!modal || modal.classList.contains('hidden'))) {
+      const firstNew = newOnes[0];
+      modalShownIds.add(firstNew.id);
+      showNewOrderModal(firstNew);
+    }
     o.forEach(x => knownIds.add(x.id));
     // track unaccepted new orders
     unacceptedNew = new Set(o.filter(x=>x.status==='new').map(x=>x.id));
