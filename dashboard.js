@@ -669,6 +669,11 @@ setInterval(() => {
   }
 }, 5000);
 
+// Expose printer functions globally for inline HTML onclick
+window.initPrinter = initPrinter;
+window.testPrinterConnection = testPrinterConnection;
+window.printReceiptEpson = printReceiptEpson;
+
 
 // Toggle accepting orders
 const toggleBtn=document.createElement("button");toggleBtn.textContent="Toggle Orders";toggleBtn.className="btn btn-ghost btn-sm";toggleBtn.style.position="fixed";toggleBtn.style.bottom="20px";toggleBtn.style.right="20px";toggleBtn.style.zIndex="9999";document.body.appendChild(toggleBtn);
