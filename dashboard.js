@@ -400,6 +400,10 @@ function loadAndRender() {
   const banner = document.getElementById('conn-banner');
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
+    // deduplicate by order id (keep first occurrence)
+    const seen = new Map();
+    o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
+    o = Array.from(seen.values());
     const newOnes = o.filter(x => x.status === 'new');
     const modal = document.getElementById('neworder-modal');
     if (newOnes.length && (!modal || modal.classList.contains('hidden'))) { showNewOrderModal(newOnes[0]); }
