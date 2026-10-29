@@ -1,14 +1,6 @@
 const SESSION_KEY = 'forno99_session';
 const API = (window.API_BASE||'') + '/api/orders';
 
-// Epson TM-m30III printer configuration (SOAP/ePOS-Print)
-const PRINTER_IP = '192.168.1.8';
-const PRINTER_URL = 'http://192.168.1.8/cgi-bin/epos/service.cgi';
-const PRINTER_DEV_ID = 'local_printer';
-let printerConnected = false;
-let autoPrintEnabled = true;
-let printedOrders = new Map(); // orderId → {status:'pending'|'printed'|'failed', attempts, error?}
-
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
     if (r.status === 401 && !String(url).includes('/api/login')) {
@@ -46,9 +38,6 @@ const els = {
   resultCount: document.getElementById('result-count'),
   refreshBtn: document.getElementById('refresh-btn'),
   signoutBtn: document.getElementById('signout-btn'),
-  printerSettingsBtn: document.getElementById('printer-settings-btn'),
-  printerSettingsModal: document.getElementById('printer-settings-modal'),
-  printerStatusText: document.getElementById('printer-status-text'),
 };
 
 let orders = [];
@@ -166,163 +155,6 @@ function getFiltered() {
     }
     return true;
   });
-}
-
-// ===== Epson Printer Functions (SOAP/ePOS-Print) =====
-
-function buildReceiptXML(order) {
-  const items = (order.items||[]).map(i =>
-    `<text>${esc(i.name)}   x${i.qty}   €${(i.qty*i.price).toFixed(2)}</text>`
-  ).join('');
-  const notes = order.notes ? `<text>Note: ${esc(order.notes)}</text>` : '';
-  return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-    <text>FARID KEBABBARO</text>
-    <feed />
-    <text>Via Leopoldo Galeotti</text>
-    <text>51017 Pescia PT</text>
-    <feed />
-    <text>Ordine #${esc(order.order_number||order.id)}</text>
-    <text>Data: ${new Date(order.created_at).toLocaleString('it-IT')}</text>
-    <text>Tipo: ${order.order_type==='delivery'?'Consegna':'Ritiro'}</text>
-    ${order.customer_name ? `<text>Cliente: ${esc(order.customer_name)}</text>` : ''}
-    ${order.customer_phone ? `<text>Tel: ${esc(order.customer_phone)}</text>` : ''}
-    ${order.delivery_address ? `<text>Indirizzo: ${esc(order.delivery_address)}</text>` : ''}
-    ${order.delivery_timing==='later' && order.delivery_time ? `<text>Orario: ${esc(order.delivery_time)}</text>` : ''}
-    ${order.order_type==='pickup' && order.pickup_time ? `<text>Ritiro: ${esc(order.pickup_time)}</text>` : ''}
-    <feed />
-    <text>  Prodotto     Qty   Prezzo</text>
-    <feed />
-    ${items}
-    <feed />
-    <text>------------------------------</text>
-    <text>Totale: €${Number(order.total).toFixed(2)}</text>
-    ${notes}
-    <feed />
-    <text>Grazie per l'ordine!</text>
-    <cut type="feed" />
-  </epos-print>`;
-}
-
-function soapPrint(xmlBody) {
-  const soap = `<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Header>
-    <parameter xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-      <devid>${PRINTER_DEV_ID}</devid>
-      <timeout>10000</timeout>
-      <printjobid>order-${Date.now()}</printjobid>
-      </s:Header>
-  <s:Body>
-    ${xmlBody}
-  </s:Body>
-</s:Envelope>`;
-
-  return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      'SOAPAction': '""',
-      'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
-    },
-    body: soap
-  });
-}
-
-function initPrinter() {
-  try {
-    printerConnected = true;
-    updatePrinterStatusUI(true);
-    return true;
-  } catch(e) {
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-    showToast('Errore inizializzazione stampante: ' + e.message);
-    return false;
-  }
-}
-
-function updatePrinterStatusUI(connected) {
-  const indicator = document.getElementById('printer-status-indicator');
-  if (!indicator) return;
-  indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
-  indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
-  if (els.printerStatusText) {
-    els.printerStatusText.textContent = connected ? 'Connessa' : 'Non connessa';
-    els.printerStatusText.style.color = connected ? '#2e7d32' : '#c0392b';
-  }
-}
-
-function testPrinterConnection() {
-  const testXML = `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-    <text>Test di connessione stampante</text>
-    <feed />
-    <text>Indirizzo: ${PRINTER_IP}</text>
-    <text>Ora: ${new Date().toLocaleString('it-IT')}</text>
-    <text>Stato: OK</text>
-    <cut type="feed" />
-  </epos-print>`;
-
-  soapPrint(testXML).then(res => res.text()).then(text => {
-    const success = /success\s*=\s*"\s*(1|true)\s*"/.test(text);
-    if (success) {
-      showToast('Stampante connessa correttamente');
-      printerConnected = true;
-      updatePrinterStatusUI(true);
-    } else {
-      const codeMatch = text.match(/code\s*=\s*"\s*(\S*)\s*"/);
-      showToast('Errore connessione stampante: ' + (codeMatch ? codeMatch[1] : 'sconosciuto'));
-      printerConnected = false;
-      updatePrinterStatusUI(false);
-    }
-  }).catch(err => {
-    console.error('Printer test error:', err);
-    showToast('Errore connessione stampante');
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-  });
-}
-
-function printOrder(order) {
-  const id = String(order.id);
-  const existing = printedOrders.get(id);
-  if (existing && existing.status === 'printed') {
-    showToast('Ordine gi\u00e0 stampato');
-    return;
-  }
-
-  printedOrders.set(id, { status: 'pending', attempts: (existing ? existing.attempts : 0) + 1 });
-  renderOrders();
-
-  try {
-    const xmlBody = buildReceiptXML(order);
-    soapPrint(xmlBody).then(res => res.text()).then(text => {
-      const success = /success\s*=\s*"\s*(1|true)\s*"/.test(text);
-      if (success) {
-        printedOrders.set(id, { status: 'printed', attempts: (existing ? existing.attempts : 0) + 1 });
-        showToast('Ricevuta stampata');
-        renderOrders();
-      } else {
-        const codeMatch = text.match(/code\s*=\s*"\s*(\S*)\s*"/);
-        printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: codeMatch ? codeMatch[1] : 'unknown' });
-        showToast('Errore stampa ricevuta');
-        renderOrders();
-      }
-    }).catch(err => {
-      console.error('Print error:', err);
-      printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: err.message });
-      showToast('Errore connessione stampante');
-      renderOrders();
-    });
-  } catch(e) {
-    console.error('Print setup error:', e);
-    printedOrders.set(id, { status: 'failed', attempts: (existing ? existing.attempts : 0) + 1, error: e.message });
-    showToast('Errore preparazione stampa');
-    renderOrders();
-  }
-}
-
-function printReceiptEpson(order) {
-  printOrder(order);
 }
 
 function setStatus(id, status, btn) {
@@ -596,12 +428,31 @@ setInterval(() => {
   }
 }, 5000);
 
-// Expose printer functions globally for inline HTML onclick
-window.initPrinter = initPrinter;
+// ===== Epson TM Print Assistant (iOS URL scheme) =====
+function buildEposXml(text) {
+  return '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">' +
+    '<s:Body><epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">' +
+    '<text>' + text + '</text><feed line="2"/><cut type="feed"/></epos-print></s:Body></s:Envelope>';
+}
+function printViaTMAssistant(xml, onSuccess) {
+  const data = encodeURIComponent(xml);
+  const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + data;
+  window.location.href = url;
+  if (typeof onSuccess === 'function') onSuccess();
+}
+function testPrinterConnection() {
+  const xml = buildEposXml('Test stampante Forno99\\n' + new Date().toLocaleString('it-IT') + '\\nOK\\n');
+  printViaTMAssistant(xml);
+  showToast('Apertura TM Print Assistant...');
+}
+function printOrder(order) {
+  // not yet connected to real orders
+  showToast('Stampa ordini non ancora abilitata');
+}
+window.initPrinter = function(){ return true; };
 window.testPrinterConnection = testPrinterConnection;
-window.printReceiptEpson = printReceiptEpson;
 window.printOrder = printOrder;
-
 // Toggle accepting orders
 const toggleBtn = document.createElement("button"); toggleBtn.textContent = "Toggle Orders"; toggleBtn.className = "btn btn-ghost btn-sm"; toggleBtn.style.position = "fixed"; toggleBtn.style.bottom = "20px"; toggleBtn.style.right = "20px"; toggleBtn.style.zIndex = "9999"; document.body.appendChild(toggleBtn);
 toggleBtn.addEventListener("click", async () => { if (!confirm("Sei sicuro?")) return; const t = sessionStorage.getItem("forno99_token"); const r = await fetch((window.API_BASE || "") + "/api/settings", { headers: { Authorization: "Bearer " + t } }); const d = await r.json(); const next = d.accepting_orders === "false" ? "true" : "false"; await fetch((window.API_BASE || "") + "/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t }, body: JSON.stringify({ key: "accepting_orders", value: next }) }); });
@@ -620,16 +471,3 @@ const ef = document.getElementById('earn-from'); const et = document.getElementB
 if (ef) ef.addEventListener('change', renderEarnings);
 if (et) et.addEventListener('change', renderEarnings);
 initAuth();
-
-// Printer settings modal handlers
-if (els.printerSettingsBtn) els.printerSettingsBtn.addEventListener('click', () => {
-  if (els.printerSettingsModal) els.printerSettingsModal.classList.remove('hidden');
-});
-const printerSettingsClose = document.getElementById('printer-settings-close');
-if (printerSettingsClose) printerSettingsClose.addEventListener('click', () => {
-  if (els.printerSettingsModal) els.printerSettingsModal.classList.add('hidden');
-});
-const printerSettingsModal = document.getElementById('printer-settings-modal');
-if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => {
-  if (e.target === printerSettingsModal) printerSettingsModal.classList.add('hidden');
-});

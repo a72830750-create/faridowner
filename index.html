@@ -45,15 +45,11 @@
                 <div class="logo">FARID KEBABBARO</div>
                 <div class="topbar-title">Pannello Proprietario</div>
             </div>
-            <div class="topbar-printer">
-                <span class="printer-status disconnected" id="printer-status-indicator" title="Stampante: 192.168.1.8"></span>
-                <button class="btn btn-ghost btn-sm" onclick="testPrinterConnection()" title="Test stampante">🖨 Test</button>
-                <button class="btn btn-ghost btn-sm" id="printer-settings-btn" title="Impostazioni stampante">⚙️</button>
-            </div>
             <div class="topbar-actions">
                 <button id="refresh-btn" class="btn btn-ghost btn-sm" title="Aggiorna orders now">
                     ↻ Aggiorna
                 </button>
+                <button class="btn btn-ghost btn-sm" onclick="testPrinterConnection()" title="Test stampante">🖨 Test</button>
                 <button id="signout-btn" class="btn btn-ghost btn-sm">Esci</button>
             </div>
         </header>
@@ -174,37 +170,6 @@
 
         <!-- ===== Toast ===== -->
         <div id="toast" class="toast hidden"></div>
-
-        <!-- ===== Stampante Settings ===== -->
-        <div id="printer-settings-modal" class="modal printer-settings-modal hidden">
-            <div class="modal-card">
-                <div class="modal-header">
-                    <h3>Impostazioni Stampante</h3>
-                    <button class="modal-close" id="printer-settings-close">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label class="modal-label" for="printer-ip-input">Indirizzo IP</label>
-                        <input type="text" id="printer-ip-input" class="modal-textarea" style="min-height:auto;" value="192.168.1.8">
-                    </div>
-                    <div class="form-group">
-                        <label class="modal-label" for="printer-devid-input">Device ID</label>
-                        <input type="text" id="printer-devid-input" class="modal-textarea" style="min-height:auto;" value="local_printer">
-                    </div>
-                    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-                        <input type="checkbox" id="printer-autoprint-checkbox" checked>
-                        <label class="modal-label" style="margin:0;">Stampa automatica all'accettazione ordine</label>
-                    </div>
-                    <div class="form-group" style="margin-top:12px;">
-                        <div style="margin-bottom:6px;"><strong>Stato connessione:</strong> <span id="printer-status-text" style="color:#c0392b;">Non testato</span></div>
-                        <button class="btn btn-primary btn-sm" onclick="testPrinterConnection()">🖨 Test Connessione</button>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-ghost" id="printer-settings-close">Chiudi</button>
-                </div>
-            </div>
-        </div>
 
     <div id="neworder-modal" class="modal hidden">
       <div class="modal-card">
