@@ -107,20 +107,32 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(245,239,230,.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* TODO: Upload WhatsApp Image to GitHub, then uncomment and set URL below:
+     background-image: url('https://cdn.jsdelivr.net/gh/a72830750-create/epos-sdk@main/WhatsApp%20Image%202026-10-29%20at%2017..jpg'); */
 }
-.topbar-brand { display: flex; align-items: center; gap: 12px; }
-.logo { font-weight: 700; font-size: 18px; background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-.topbar-title { color: var(--muted); font-size: 14px; }
-.topbar-whatsapp { display: flex; align-items: center; gap: 8px; background: linear-gradient(90deg, rgba(255,255,255,.15), rgba(255,255,255,0)); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); box-shadow: inset -4px 0 12px rgba(0,0,0,.25); }
-.wa-img { width: 28px; height: 28px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
-.wa-text { color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.35) 80%, rgba(0,0,0,0) 100%);
+  z-index: 0;
+}
+.topbar-brand, .topbar-title, .logo, .topbar-actions, .topbar button {
+  position: relative;
+  z-index: 1;
+}
+.logo { font-weight: 700; font-size: 18px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.topbar-title { color: #fff; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
 .topbar-actions { display: flex; gap: 8px; }
+.topbar-actions .btn { color: #fff; border-color: rgba(255,255,255,.5); }
+.topbar-actions .btn:hover { background: rgba(255,255,255,.15); border-color: #fff; }
 .topbar-printer { display: flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.3); }
 .printer-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .printer-status.connected { background: #2e7d32; box-shadow: 0 0 6px #2e7d32; }
