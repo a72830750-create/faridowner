@@ -1,5 +1,11 @@
 const SESSION_KEY = 'forno99_session';
 const API = (window.API_BASE||'') + '/api/orders';
+
+// Epson TM-m30III printer configuration
+const PRINTER_IP = '192.168.1.8';
+let epsonDevice = null;
+let printerConnected = false;
+let autoPrintEnabled = true;
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
     if (r.status === 401 && !String(url).includes('/api/login')) {
@@ -328,6 +334,7 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     showToast(`Ordine ${o.order_number} → ${status}`);
+    if (status === 'preparing' && autoPrintEnabled) { printReceipt(o); }
     if (currentStatus !== 'all') {
       currentStatus = status;
       els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -377,7 +384,7 @@ if (modalEl) modalEl.addEventListener('click', (e) => {
 });
 
 function initAuth() {
-  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); }
+  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); }
   else showLogin();
 }
 
@@ -419,6 +426,111 @@ function loadAndRender() {
   }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
+els.signoutBtn.addEventListener('click', () => {
+  const t = sessionStorage.getItem('forno99_token');
+  fetch((window.API_BASE||'') + '/api/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}}).finally(()=>{
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('forno99_token');
+    showLogin();
+  });
+});
+
+// ===== Epson Printer Functions =====
+function initPrinter() {
+  try {
+    epsonDevice = new window.ePOSPrint.Device();
+    epsonDevice.ethernet = window.ePOSPrint.Ethernet.build(PRINTER_IP, 80);
+    printerConnected = true;
+    updatePrinterStatusUI(true);
+    return true;
+  } catch(e) {
+    console.error('Printer init error:', e);
+    printerConnected = false;
+    updatePrinterStatusUI(false);
+    return false;
+  }
+}
+
+function updatePrinterStatusUI(connected) {
+  const indicator = document.getElementById('printer-status-indicator');
+  if (!indicator) return;
+  indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
+  indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
+}
+
+function testPrinterConnection() {
+  if (!epsonDevice) {
+    showToast('Stampante non inizializzata. Inizializzazione...');
+    initPrinter();
+    return;
+  }
+  const ctx = new window.ePOSPrint.Context();
+  ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
+  ctx.add('Test di connessione stampante\\n');
+  ctx.add('Indirizzo: ' + PRINTER_IP + '\\n');
+  ctx.add('Ora: ' + new Date().toLocaleString('it-IT') + '\\n');
+  ctx.add('Stato: Connesso\\n');
+  ctx.add('--------------------------------\\n');
+  epsonDevice.send(ctx).then(() => {
+    showToast('Stampante connessa correttamente');
+    printerConnected = true;
+    updatePrinterStatusUI(true);
+  }).catch(err => {
+    console.error('Printer connection test failed:', err);
+    showToast('Errore connessione stampante');
+    printerConnected = false;
+    updatePrinterStatusUI(false);
+  });
+}
+
+function printReceipt(order) {
+  if (!printerConnected || !epsonDevice) {
+    showToast('Stampante non disponibile per la stampa');
+    return;
+  }
+  try {
+    const ctx = new window.ePOSPrint.Context();
+    ctx.page = window.ePOSPrint.Page.build(window.ePOSPrint.Page.TYPE.RECEIPT_80MM);
+
+    ctx.add('FARID KEBABBARO\\n');
+    ctx.add('Via Leopoldo Galeotti\\n');
+    ctx.add('51017 Pescia PT\\n');
+    ctx.add('------------------------------\\n');
+    ctx.add('Ordine #' + (order.order_number||order.id) + '\\n');
+    ctx.add('Data: ' + new Date(order.created_at).toLocaleString('it-IT') + '\\n');
+    ctx.add('Tipo: ' + (order.order_type==='delivery'?'Consegna':'Ritiro') + '\\n');
+    if (order.customer_name) ctx.add('Cliente: ' + order.customer_name + '\\n');
+    if (order.customer_phone) ctx.add('Tel: ' + order.customer_phone + '\\n');
+    if (order.delivery_address) ctx.add('Indirizzo: ' + order.delivery_address + '\\n');
+    if (order.delivery_timing==='later' && order.delivery_time) ctx.add('Orario: ' + order.delivery_time + '\\n');
+    if (order.order_type==='pickup' && order.pickup_time) ctx.add('Ritiro: ' + order.pickup_time + '\\n');
+    ctx.add('------------------------------\\n');
+    ctx.add('  Prodotto     Qty   Prezzo\\n');
+    (order.items||[]).forEach(i => {
+      ctx.add('  ' + i.name + '   x' + i.qty + '   €' + (i.qty*i.price).toFixed(2) + '\\n');
+    });
+    ctx.add('------------------------------\\n');
+    ctx.add('  Totale: €' + Number(order.total).toFixed(2) + '\\n');
+    if (order.notes) ctx.add('Note: ' + order.notes + '\\n');
+    ctx.add('------------------------------\\n');
+    ctx.add('  Grazie per l ordine!\\n');
+    ctx.add('------------------------------\\n');
+    ctx.add('\\n\\n');
+
+    epsonDevice.send(ctx).then(() => {
+      showToast('Ricevuta stampata');
+    }).catch(err => {
+      console.error('Print error:', err);
+      showToast('Errore stampa ricevuta');
+      printerConnected = false;
+      updatePrinterStatusUI(false);
+    });
+  } catch(e) {
+    console.error('Print setup error:', e);
+    showToast('Errore preparazione stampa');
+  }
+}
+
 els.loginForm.addEventListener('submit', e => {
   e.preventDefault();
   const user = document.getElementById('login-email').value.trim();
@@ -432,6 +544,7 @@ els.loginForm.addEventListener('submit', e => {
     els.loginError.classList.add('hidden');
     showDashboard();
     loadAndRender();
+    initPrinter();
   }).catch(()=>{
     els.loginError.textContent = 'Nome utente o password non validi.';
     els.loginError.classList.remove('hidden');
@@ -555,3 +668,4 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
 const ef=document.getElementById('earn-from'); const et=document.getElementById('earn-to');
 if(ef) ef.addEventListener('change', renderEarnings);
 if(et) et.addEventListener('change', renderEarnings);
+initAuth();
