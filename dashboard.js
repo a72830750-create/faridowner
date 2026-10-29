@@ -623,7 +623,7 @@ els.orderList.addEventListener('click', e => {
   else if (action === 'preparing') setStatus(id, 'preparing', btn);
   else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery', btn); }
   else if (action === 'complete') setStatus(id, 'completed', btn);
-  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printReceipt(o); }
+  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printReceiptEpson(o); }
 });
 
 if (els.statusModal) {
