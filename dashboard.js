@@ -439,7 +439,7 @@ function renderOrders() {
       ${o.notes ? '<div class="order-meta"><span>\ud83d\udcdd ' + esc(o.notes) + '</span></div>' : ''}
       <ul class="order-items">${(o.items || []).map(i => '<li>' + i.qty + '\u00d7 ' + esc(i.name) + ' <span style="float:right">\u20ac' + (i.qty * i.price).toFixed(2) + '</span></li>').join('')}</ul>
       <div class="order-foot">
-        <div class="order-total">\u20ac' + Number(o.total).toFixed(2) + '</div>
+        <div class="order-total">\u20ac${Number(o.total).toFixed(2)}</div>
         <div class="order-actions">
           <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
           <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Stampa</button>
