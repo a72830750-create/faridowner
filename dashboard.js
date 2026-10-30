@@ -265,15 +265,8 @@ function printOrder(order) {
   printedOrders.set(id, { status: 'pending', attempts: (existing ? existing.attempts : 0) + 1 });
   renderOrders();
 
-  if (/Android/i.test(navigator.userAgent)) {
-    try {
-      const xmlBody = buildReceiptXML(order);
-      soapPrint(xmlBody).then(res => res.text()).then(text => {
-        const success = /success\s*=\s*"\s*(1|true)\s*"/.test(text);
-        if (success) { showToast('Ricevuta stampata'); }
-        else { showToast('Errore stampa ricevuta'); }
-      }).catch(() => showToast('Errore connessione stampante'));
-    } catch (e) { showToast('Errore preparazione stampa'); }
+  if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+    showToast('Stampa disponibile solo su PC');
     return;
   }
   try {
