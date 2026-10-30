@@ -267,7 +267,7 @@ function printOrder(order) {
 
   try {
     const xmlBody = buildReceiptXML(order);
-    const xml = '<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' + xmlBody + '</s:Body></s:Envelope>';
+    const xml = xmlBody;
     const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + encodeURIComponent(xml);
     window.location.href = url;
     showToast('Apertura stampa ordine #' + (order.order_number || order.id));
