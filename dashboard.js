@@ -378,7 +378,7 @@ let knownIds = new Set();
 let unacceptedNew = new Set();
 let alarmTimer = null;
 let alarmAudio = null;
-function playAlarm() { try { if (!alarmAudio) { alarmAudio = new Audio('ali_kebab_real_siren_alert.wav'); alarmAudio.loop = true; } alarmAudio.play(); } catch(e){ console.error('alarm', e); } }
+function playAlarm() { try { if (!alarmAudio) { alarmAudio = new Audio('ali_kebab_real_siren_alert.wav'); alarmAudio.loop = true; alarmAudio.preload = 'auto'; alarmAudio.load(); } alarmAudio.play(); } catch(e){ console.error('alarm', e); } }
 function stopAlarm() { if (alarmAudio) { alarmAudio.pause(); alarmAudio.currentTime = 0; } }
 let audioCtx = null;
 function ensureAudio() {
