@@ -171,36 +171,28 @@ function getFiltered() {
 // ===== Epson Printer Functions (SOAP/ePOS-Print) =====
 
 function buildReceiptXML(order) {
-  const items = (order.items||[]).map(i =>
-    `<text>${esc(i.name)}</text><text>   x${i.qty}   ${Number(i.qty*i.price).toFixed(2)}</text>`
-  ).join('<feed />');
-  const notes = order.notes ? `<text>--------------------------------</text><text>NOTE: ${esc(order.notes)}</text><text>--------------------------------</text>` : '';
+  const maxName = 22;
+  const shorten = (n) => {
+    const s = String(n || '');
+    return s.length > maxName ? s.slice(0, maxName - 1) + '.' : s;
+  };
+  const items = (order.items || []).map(i => {
+    const left = `${i.qty}x ${shorten(i.name)}`;
+    const price = Number(i.qty * i.price).toFixed(2);
+    const pad = ' '.repeat(Math.max(1, 30 - left.length));
+    return `<text>${esc(left)}${pad}${price}</text>`;
+  }).join('');
+  const note = order.notes ? `<text>${esc(order.notes)}</text><feed />` : '';
+  const pickupTime = order.order_type === 'pickup' ? (order.pickup_time || 'ASAP') : (order.delivery_timing === 'later' ? (order.delivery_time || 'ASAP') : 'ASAP');
   return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
     <text align="center">FARID KEBABBARO</text>
-    <text align="center">Via Leopoldo Galeotti, 51017 Pescia PT</text>
+    <text align="center">Via Leopoldo Galeotti</text>
+    <text align="center">51017 Pescia PT</text>
     <feed />
-    <text>--------------------------------</text>
-    <text>Ordine #${esc(order.order_number||order.id)}</text>
-    <text>Data: ${new Date(order.created_at).toLocaleString('it-IT')}</text>
-    <text>Metodo: ${order.order_type==='delivery'?'Consegna':'Ritiro'}</text>
-    ${order.order_type==='delivery' && order.delivery_timing==='later' && order.delivery_time ? `<text>Orario consegna: ${esc(order.delivery_time)}</text>` : ''}
-    ${order.order_type==='delivery' && (!order.delivery_timing || order.delivery_timing!=='later') ? `<text>Orario consegna: ASAP</text>` : ''}
-    ${order.order_type==='pickup' && order.pickup_time ? `<text>Orario ritiro: ${esc(order.pickup_time)}</text>` : ''}
-    ${order.order_type==='pickup' && !order.pickup_time ? `<text>Orario ritiro: ASAP</text>` : ''}
-    ${order.customer_name ? `<text>Cliente: ${esc(order.customer_name)}</text>` : ''}
-    ${order.customer_phone ? `<text>Tel: ${esc(order.customer_phone)}</text>` : ''}
-    ${order.delivery_address ? `<text>Indirizzo: ${esc(order.delivery_address)}</text>` : ''}
-    <text>--------------------------------</text>
-    <text>Prodotto            Qty   Prezzo</text>
-    <text>--------------------------------</text>
+    ${note}
     ${items}
     <feed />
-    <text>--------------------------------</text>
-    <text align="right">Totale: ${Number(order.total).toFixed(2)}</text>
-    <feed />
-    ${notes}
-    <feed />
-    <text align="center">Grazie per l'ordine!</text>
+    <text align="center" dw="true" dh="true" em="true">RITIRO: ${esc(pickupTime)}</text>
     <feed line="3" />
     <cut type="feed" />
   </epos-print>`;
