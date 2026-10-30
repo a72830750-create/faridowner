@@ -193,7 +193,7 @@ function buildReceiptXML(order) {
     ${items}
     <feed />
     <text align="center" dw="true" dh="true" em="true">RITIRO: ${esc(pickupTime)}</text>
-    <feed line="3" />
+    <feed line="6" />
     <cut type="feed" />
   </epos-print>`;
 }
