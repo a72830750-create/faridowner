@@ -583,7 +583,10 @@ function initAuth() {
   if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); }
   else showLogin();
 }
-initAuth();
+const noAccept = document.getElementById('no-accept');
+const noReject = document.getElementById('no-reject');
+if (noAccept) noAccept.addEventListener('click', () => { if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'preparing'); document.getElementById('neworder-modal').classList.add('hidden'); } });
+if (noReject) noReject.addEventListener('click', () => { if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'rejected'); document.getElementById('neworder-modal').classList.add('hidden'); } });
 
 // Printer settings modal handlers
 if (els.printerSettingsBtn) els.printerSettingsBtn.addEventListener('click', () => {
