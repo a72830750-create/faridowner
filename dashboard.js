@@ -172,33 +172,41 @@ function getFiltered() {
 
 function buildReceiptXML(order) {
   const items = (order.items||[]).map(i =>
-    `<text>${esc(i.name)}   x${i.qty}   €${(i.qty*i.price).toFixed(2)}</text>`
-  ).join('');
-  const notes = order.notes ? `<text>Note: ${esc(order.notes)}</text>` : '';
+    `<text em="true">${esc(i.name)}</text><text>   x${i.qty}   €${(i.qty*i.price).toFixed(2)}</text>`
+  ).join('<feed />');
+  const notes = order.notes ? `<text>--------------------------------</text><text em="true">NOTE</text><text>${esc(order.notes)}</text><text>--------------------------------</text>` : '';
   return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-    <text>FARID KEBABBARO</text>
-    <feed />
-    <text>Via Leopoldo Galeotti</text>
-    <text>51017 Pescia PT</text>
-    <feed />
-    <text>Ordine #${esc(order.order_number||order.id)}</text>
+    <text align="center" em="true" dw="true" dh="true">FARID KEBABBARO</text>
+    <text align="center">Via Leopoldo Galeotti</text>
+    <text align="center">51017 Pescia PT</text>
+    <feed line="2" />
+    <text>================================</text>
+    <text em="true">DATI ORDINE</text>
+    <text>================================</text>
+    <text em="true">Ordine #${esc(order.order_number||order.id)}</text>
     <text>Data: ${new Date(order.created_at).toLocaleString('it-IT')}</text>
     <text>Tipo: ${order.order_type==='delivery'?'Consegna':'Ritiro'}</text>
-    ${order.customer_name ? `<text>Cliente: ${esc(order.customer_name)}</text>` : ''}
+    ${order.customer_name ? `<text em="true">Cliente: ${esc(order.customer_name)}</text>` : ''}
     ${order.customer_phone ? `<text>Tel: ${esc(order.customer_phone)}</text>` : ''}
     ${order.delivery_address ? `<text>Indirizzo: ${esc(order.delivery_address)}</text>` : ''}
-    ${order.delivery_timing==='later' && order.delivery_time ? `<text>Orario: ${esc(order.delivery_time)}</text>` : ''}
+    ${order.delivery_timing==='later' && order.delivery_time ? `<text>Orario consegna: ${esc(order.delivery_time)}</text>` : ''}
     ${order.order_type==='pickup' && order.pickup_time ? `<text>Ritiro: ${esc(order.pickup_time)}</text>` : ''}
-    <feed />
-    <text>  Prodotto     Qty   Prezzo</text>
-    <feed />
+    <feed line="2" />
+    <text>================================</text>
+    <text em="true">PRODOTTI</text>
+    <text>================================</text>
+    <text>Prodotto            Qty   Prezzo</text>
+    <text>--------------------------------</text>
     ${items}
     <feed />
-    <text>------------------------------</text>
-    <text>Totale: €${Number(order.total).toFixed(2)}</text>
+    <text>--------------------------------</text>
+    <text em="true" align="right">Totale: €${Number(order.total).toFixed(2)}</text>
+    <feed line="2" />
     ${notes}
-    <feed />
-    <text>Grazie per l'ordine!</text>
+    <feed line="2" />
+    <text align="center" em="true">Grazie per l'ordine!</text>
+    <text align="center">A presto</text>
+    <feed line="4" />
     <cut type="feed" />
   </epos-print>`;
 }
