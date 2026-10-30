@@ -265,6 +265,17 @@ function printOrder(order) {
   printedOrders.set(id, { status: 'pending', attempts: (existing ? existing.attempts : 0) + 1 });
   renderOrders();
 
+  if (/Android/i.test(navigator.userAgent)) {
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write('<pre style="font-family:monospace;font-size:12px;">' + buildReceiptXML(order).replace(/<[^>]+>/g, '\n').trim() + '</pre>');
+      w.document.close();
+      w.focus();
+      w.print();
+    }
+    showToast('Stampa avviata');
+    return;
+  }
   try {
     const xmlBody = buildReceiptXML(order);
     const xml = xmlBody;
