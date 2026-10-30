@@ -174,7 +174,7 @@ function buildReceiptXML(order) {
   const items = (order.items||[]).map(i =>
     `<text em="true">${esc(i.name)}</text><text>   x${i.qty}   €${(i.qty*i.price).toFixed(2)}</text>`
   ).join('<feed />');
-  const notes = order.notes ? `<text>--------------------------------</text><text em="true">NOTE</text><text>${esc(order.notes)}</text><text>--------------------------------</text>` : '';
+  const notes = order.notes ? `<text>================================</text><text em="true">NOTE</text><text>================================</text><text>${esc(order.notes)}</text><text>================================</text>` : '';
   return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
     <text align="center" em="true" dw="true" dh="true">FARID KEBABBARO</text>
     <text align="center">Via Leopoldo Galeotti</text>
@@ -185,12 +185,14 @@ function buildReceiptXML(order) {
     <text>================================</text>
     <text em="true">Ordine #${esc(order.order_number||order.id)}</text>
     <text>Data: ${new Date(order.created_at).toLocaleString('it-IT')}</text>
-    <text>Tipo: ${order.order_type==='delivery'?'Consegna':'Ritiro'}</text>
-    ${order.customer_name ? `<text em="true">Cliente: ${esc(order.customer_name)}</text>` : ''}
+    <text>Metodo: ${order.order_type==='delivery'?'Consegna a domicilio':'Ritiro in negozio'}</text>
+    ${order.order_type==='delivery' && order.delivery_timing==='later' && order.delivery_time ? `<text>Orario consegna: ${esc(order.delivery_time)}</text>` : ''}
+    ${order.order_type==='delivery' && (!order.delivery_timing || order.delivery_timing!=='later') ? `<text>Orario consegna: il prima possibile</text>` : ''}
+    ${order.order_type==='pickup' && order.pickup_time ? `<text>Orario ritiro: ${esc(order.pickup_time)}</text>` : ''}
+    ${order.order_type==='pickup' && !order.pickup_time ? `<text>Orario ritiro: il prima possibile</text>` : ''}
+    ${order.customer_name ? `<text>Cliente: ${esc(order.customer_name)}</text>` : ''}
     ${order.customer_phone ? `<text>Tel: ${esc(order.customer_phone)}</text>` : ''}
     ${order.delivery_address ? `<text>Indirizzo: ${esc(order.delivery_address)}</text>` : ''}
-    ${order.delivery_timing==='later' && order.delivery_time ? `<text>Orario consegna: ${esc(order.delivery_time)}</text>` : ''}
-    ${order.order_type==='pickup' && order.pickup_time ? `<text>Ritiro: ${esc(order.pickup_time)}</text>` : ''}
     <feed line="2" />
     <text>================================</text>
     <text em="true">PRODOTTI</text>
@@ -200,11 +202,11 @@ function buildReceiptXML(order) {
     ${items}
     <feed />
     <text>--------------------------------</text>
-    <text em="true" align="right">Totale: €${Number(order.total).toFixed(2)}</text>
+    <text align="right">Totale: €${Number(order.total).toFixed(2)}</text>
     <feed line="2" />
     ${notes}
     <feed line="2" />
-    <text align="center" em="true">Grazie per l'ordine!</text>
+    <text align="center">Grazie per l'ordine!</text>
     <text align="center">A presto</text>
     <feed line="4" />
     <cut type="feed" />
