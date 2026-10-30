@@ -118,39 +118,6 @@ body {
 .logo { font-weight: 700; font-size: 18px; background: linear-gradient(90deg,var(--accent),var(--accent-2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .topbar-title { color: var(--muted); font-size: 14px; }
 .topbar-actions { display: flex; gap: 8px; }
-.topbar-printer { display: flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.3); }
-.printer-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.printer-status.connected { background: #2e7d32; box-shadow: 0 0 6px #2e7d32; }
-.printer-status.disconnected { background: #c0392b; box-shadow: 0 0 6px #c0392b; }
-.topbar-printer { display: flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.3); }
-.printer-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.printer-status.connected { background: #2e7d32; box-shadow: 0 0 6px #2e7d32; }
-.printer-status.disconnected { background: #c0392b; box-shadow: 0 0 6px #c0392b; }
-.print-badge {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: 12px;
-  line-height: 20px;
-  text-align: center;
-  margin-left: 6px;
-  vertical-align: middle;
-  font-weight: bold;
-}
-.print-badge.printed { background: #2e7d32; color: #fff; box-shadow: 0 0 6px #2e7d32; }
-.print-badge.failed { background: #c0392b; color: #fff; box-shadow: 0 0 6px #c0392b; cursor: pointer; }
-.print-badge.pending { background: #f39c12; color: #fff; box-shadow: 0 0 6px #f39c12; }
-.print-badge.default { background: #7f8c8d; color: #fff; }
-.dashboard-body { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
-
-/* Stats */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
-  gap: 14px;
-  margin-bottom: 20px;
-}
 .stat-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -337,9 +304,26 @@ body {
 .earnings-label { font-size: 12px; color: #888; }
 .earnings-value { font-size: 20px; font-weight: 700; }
 
-/* ===== Printer Settings Modal ===== */
-.printer-settings-modal .modal-body { max-height: 300px; overflow-y: auto; }
-.printer-settings-modal .form-group { margin-bottom: 10px; }
-.printer-settings-modal .modal-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--muted); }
-.printer-settings-modal .modal-textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; background: var(--input-bg); color: var(--text); }
-.printer-settings-modal .btn-primary.btn-sm { padding: 8px 16px; font-size: 13px; }
+
+/* ===== Mobile app layout ===== */
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+  body { font-size: 16px; -webkit-text-size-adjust: 100%; }
+  .topbar { padding: 8px 10px; gap: 8px; }
+  .topbar-actions { gap: 6px; }
+  .btn { min-height: 44px; padding: 10px 12px; font-size: 15px; }
+  .btn-sm { min-height: 40px; padding: 8px 10px; font-size: 14px; }
+  input, select, textarea { font-size: 16px; }
+  .order-card { margin: 8px 0; border-radius: 12px; }
+  .order-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .order-actions .btn { flex: 1 1 45%; }
+  .modal { width: 92vw; max-width: 92vw; border-radius: 16px; }
+  .modal-body { max-height: 70vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .filter-tabs, .earnings-tabs { gap: 6px; overflow-x: auto; flex-wrap: nowrap; }
+  .order-meta { flex-wrap: wrap; gap: 4px; }
+  .order-items li { font-size: 14px; }
+}
+@supports (padding: max(0px)) {
+  .topbar { padding-top: max(8px, env(safe-area-inset-top)); }
+  body { padding-bottom: env(safe-area-inset-bottom); }
+}
