@@ -113,13 +113,23 @@ function rome(d) { const x = new Date(d.toLocaleString('en-US', { timeZone: 'Eur
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
-function saveStatus(id, status) {
+const ALLOWED_STATUSES = ['new', 'accepted', 'rejected', 'completed', 'preparing', 'ready', 'out_for_delivery'];
+const STATUS_LABELS = { new: 'Nuovo', accepted: 'Accettato', rejected: 'Rifiutato', completed: 'Completato', preparing: 'In preparazione', ready: 'Pronto', out_for_delivery: 'In consegna' };
+const pendingStatus = new Map(); // id -> status
+
+async function saveStatus(id, status) {
   const t = sessionStorage.getItem('forno99_token');
-  return authFetch(API + '/' + id, {
+  const r = await authFetch(API + '/' + encodeURIComponent(id), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
     body: JSON.stringify({ status })
-  }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; });
+  });
+  if (!r.ok) {
+    let msg = 'HTTP ' + r.status;
+    try { const txt = await r.text(); if (txt) msg += ': ' + txt.slice(0, 80); } catch (_) {}
+    throw new Error(msg);
+  }
+  try { return await r.json(); } catch (_) { return { id, status }; }
 }
 
 function matchesDate(o) {
@@ -635,41 +645,40 @@ function printReceiptEpson(order) {
   printOrder(order);
 }
 
-function setStatus(id, status, btn) {
-  const o = orders.find(x => String(x.id) === String(id));
-  if (!o || o._saving) return;
-  o._saving = true;
+function getOrderById(id) { return orders.find(x => String(x.id) === String(id)); }
+
+async function setStatus(id, status, btn) {
+  if (!ALLOWED_STATUSES.includes(status)) { showToast('Stato non valido'); return; }
+  const key = String(id);
+  const o = getOrderById(id);
+  if (!o) { showToast('Ordine non trovato'); return; }
+  if (pendingStatus.has(key)) return;
   const prev = o.status;
+  if (prev === status) return;
+  pendingStatus.set(key, status);
   o.status = status;
-  renderStats();
-  renderOrders();
-  renderEarnings();
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
-  saveStatus(id, status).then(() => {
-    o._saving = false;
-    showToast('Ordine ' + o.order_number + ' \u2192 ' + status);
-    // Auto-print is client-side; do not claim cross-device atomic locking without backend support.
-    const _prevPS = String(prev || '').toLowerCase();
-    const _newPS = String(status || '').toLowerCase();
-    if (_newPS === 'preparing' && _prevPS !== 'preparing' && autoPrintEnabled) {
-      printOrder(o, { auto: true });
+  renderStats(); renderOrders(); renderEarnings();
+  if (btn) { btn.disabled = true; }
+  try {
+    const updated = await saveStatus(id, status);
+    pendingStatus.delete(key);
+    const fresh = getOrderById(id);
+    if (fresh) {
+      Object.assign(fresh, updated && typeof updated === 'object' ? updated : {}, { status });
+      delete fresh._saving;
     }
-    if (currentStatus !== 'all') {
-      currentStatus = status;
-      els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-      const nt = els.filterTabs.querySelector('.filter-tab[data-status="' + status + '"]');
-      if (nt) nt.classList.add('active');
-      renderOrders();
+    showToast('Ordine ' + (o.order_number || id) + ' \u2192 ' + (STATUS_LABELS[status] || status));
+    if (status === 'preparing' && String(prev).toLowerCase() !== 'preparing' && autoPrintEnabled) {
+      printOrder(fresh || o, { auto: true });
     }
-  }).catch(() => {
-    o._saving = false;
-    o.status = prev;
-    renderStats();
-    renderOrders();
-    renderEarnings();
-    if (btn) { btn.disabled = false; }
-    showToast('Errore aggiornamento');
-  });
+  } catch (err) {
+    pendingStatus.delete(key);
+    const fresh = getOrderById(id);
+    if (fresh) { fresh.status = prev; delete fresh._saving; }
+    console.error('setStatus failed', err);
+    showToast('Errore aggiornamento: ' + (err && err.message ? err.message : 'riprova'));
+  }
+  renderStats(); renderOrders(); renderEarnings();
 }
 
 function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
@@ -680,7 +689,7 @@ function loadAndRender() {
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
     const seen = new Map();
-    o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
+    (Array.isArray(o) ? o : []).forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
     o = Array.from(seen.values());
     const newOnes = o.filter(x => x.status === 'new' && !modalShownIds.has(x.id));
     const modal = document.getElementById('neworder-modal');
@@ -690,11 +699,19 @@ function loadAndRender() {
       showNewOrderModal(firstNew);
     }
     o.forEach(x => knownIds.add(x.id));
-    orders = o;
+    // Merge server data but preserve in-flight optimistic status changes
+    orders = o.map(x => {
+      const key = String(x.id);
+      if (pendingStatus.has(key)) return Object.assign({}, x, { status: pendingStatus.get(key), _saving: true });
+      return x;
+    });
     renderStats();
     renderOrders();
     renderEarnings();
-  }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
+  }).catch((err) => {
+    console.error('loadOrders failed', err);
+    if (banner) banner.classList.add('show');
+  });
 }
 
 function showNewOrderModal(o) {
@@ -760,11 +777,13 @@ function renderOrders() {
     const printDisabled = pstatus === 'pending';
     const printLabel = pstatus === 'pending' ? 'Stampa...' : (pstatus === 'failed' ? 'Riprova' : (pstatus === 'uncertain' ? 'Verifica/Riprova' : 'Stampa'));
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
-    if (o._saving) card.classList.add('saving');
+    const saving = pendingStatus.has(String(o.id));
+    if (saving) card.classList.add('saving');
+    const dis = saving ? 'disabled' : '';
     card.innerHTML = `
       <div class="order-head">
         <div class="order-number">${esc(o.order_number)} <span class="order-id">ID: ${o.id}</span></div>
-        <span class="order-status ${statusClass(o.status)}">${o.status}</span>
+        <span class="order-status ${statusClass(o.status)}">${esc(STATUS_LABELS[o.status] || o.status)}</span>
         ${pbadge}
       </div>
       <div class="order-meta">
@@ -781,12 +800,12 @@ function renderOrders() {
       <div class="order-foot">
         <div class="order-total">\u20ac${Number(o.total).toFixed(2)}</div>
         <div class="order-actions">
-          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
-          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}" ${printDisabled ? 'disabled' : ''}>${printLabel}</button>
-          ${o.status === 'new' ? '<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>' : ''}
-          ${o.status === 'accepted' ? '<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>' : ''}
-          ${o.status === 'preparing' ? '<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" onclick="setStatus(\'' + o.id + '\',\'ready\',this)">Segna pronto</button>' : ''}
-          ${o.status === 'ready' || o.status === 'out_for_delivery' ? '<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>' : ''}
+          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}" ${dis}>Aggiorna</button>
+          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}" ${printDisabled || saving ? 'disabled' : ''}>${printLabel}</button>
+          ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}" ${dis}>Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}" ${dis}>Rifiuta</button>` : ''}
+          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}" ${dis}>In preparazione</button>` : ''}
+          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" ${dis}>Segna pronto</button>` : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}" ${dis}>${saving ? '...' : 'Completa'}</button>` : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
