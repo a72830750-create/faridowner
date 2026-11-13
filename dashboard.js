@@ -243,19 +243,39 @@ function updatePrinterStatusUI(connected) {
 function sendToPrintAssistant(xml) {
   const envelope = buildSoapEnvelope(xml);
   const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + encodeURIComponent(envelope);
-  const a = document.createElement('a');
-  a.href = url;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { try { document.body.removeChild(a); } catch(e) {} }, 1000);
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    setTimeout(() => { try { document.body.removeChild(iframe); } catch(e) {} }, 1500);
+  } catch(e) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { try { document.body.removeChild(a); } catch(e) {} }, 1000);
+  }
+}
+
+function fallbackBrowserPrint(order) {
+  try {
+    const w = window.open('', '_blank');
+    if (!w) return false;
+    w.document.write('<pre style="font-family:monospace;font-size:12px;white-space:pre-wrap;">' + buildReceiptXML(order).replace(/<[^>]+>/g, '\n').replace(/\n+/g, '\n').trim() + '</pre>');
+    w.document.close();
+    w.focus();
+    w.print();
+    return true;
+  } catch(e) { return false; }
 }
 
 function testPrinterConnection() {
   const xml = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text>Test stampante Forno99&#10;' + new Date().toLocaleString('it-IT') + '&#10;OK&#10;</text><feed line="2"/><cut type="feed"/></epos-print>';
   try {
     sendToPrintAssistant(xml);
-    showToast('Stampa test inviata a TM Print Assistant');
+    showToast('Stampa test inviata. Se non parte, installa/apri Epson TM Print Assistant.');
   } catch(e) {
     showToast('Errore stampa test: ' + e.message);
   }
@@ -269,10 +289,11 @@ function printOrder(order) {
   try {
     sendToPrintAssistant(buildReceiptXML(order));
     printedOrders.set(key, { status: 'printed', attempts: (printedOrders.get(key) || {}).attempts || 1 });
-    showToast('Stampa inviata: ' + (order.order_number || order.id));
+    showToast('Stampa inviata: ' + (order.order_number || order.id) + '. Se non parte, apri TM Print Assistant.');
   } catch(e) {
-    printedOrders.set(key, { status: 'failed', attempts: (printedOrders.get(key) || {}).attempts || 1, error: e.message });
-    showToast('Errore stampa: ' + e.message);
+    const ok = fallbackBrowserPrint(order);
+    printedOrders.set(key, { status: ok ? 'printed' : 'failed', attempts: (printedOrders.get(key) || {}).attempts || 1, error: e.message });
+    showToast(ok ? 'Stampato via browser (fallback)' : 'Errore stampa: ' + e.message);
   }
   renderOrders();
 }
