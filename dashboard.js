@@ -168,34 +168,66 @@ function getFiltered() {
   });
 }
 
-// ===== Epson Printer Functions (SOAP/ePOS-Print) =====
+// ===== Epson Printer Functions (direct ePOS) =====
+// Inspected: prior implementation handed off via tmprintassistant:// (external app) and had a
+// browser window.print() fallback. Replaced with direct ePOS-Print attempts to printer IP
+// PRINTER_IP:148 (TM-m30III, ePOS service /cgi-bin/epos/service.cgi) using ePOS SDK and HTTP.
+// Browser security: from an HTTPS origin, direct fetch/XHR to http://PRINTER_IP is blocked by
+// active mixed content, and cross-origin LAN requests face CORS/preflight limits. The SDK
+// transport is subject to the same browser/network restrictions. This code attempts direct
+// connection and reports the exact limitation; it does NOT use window.print() or external apps.
+
+function fmtMoney(v) { const n = Number(v); return (isFinite(n) ? n : 0).toFixed(2); }
+function fmtDateTime(v) {
+  try { const d = v ? new Date(v) : new Date(); return isNaN(d) ? String(v || '') : d.toLocaleString('it-IT'); }
+  catch(e) { return String(v || ''); }
+}
+function lineLR(left, right, width) {
+  const l = String(left || ''), r = String(right || '');
+  const pad = Math.max(1, (width || 32) - l.length - r.length);
+  return l + ' '.repeat(pad) + r;
+}
 
 function buildReceiptXML(order) {
-  const maxName = 22;
-  const shorten = (n) => {
-    const s = String(n || '');
-    return s.length > maxName ? s.slice(0, maxName - 1) + '.' : s;
-  };
+  const w = 32;
   const items = (order.items || []).map(i => {
-    const left = `${i.qty}x ${shorten(i.name)}`;
-    const price = Number(i.qty * i.price).toFixed(2);
-    const pad = ' '.repeat(Math.max(1, 30 - left.length));
-    return `<text>${esc(left)}${pad}${price}</text>`;
+    const qty = Number(i.qty) || 0;
+    const price = Number(i.price) || 0;
+    const name = String(i.name || '');
+    const l1 = esc(lineLR(qty + 'x ' + name, 'EUR ' + fmtMoney(qty * price), w));
+    const l2 = esc('   @ EUR ' + fmtMoney(price));
+    return `<text>${l1}&#10;${l2}&#10;</text>`;
   }).join('');
-  const note = order.notes ? `<text>${esc(order.notes)}</text><feed />` : '';
-  const pickupTime = order.order_type === 'pickup' ? (order.pickup_time || 'ASAP') : (order.delivery_timing === 'later' ? (order.delivery_time || 'ASAP') : 'ASAP');
-  return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-    <text align="center">FARID KEBABBARO</text>
-    <text align="center">Via Leopoldo Galeotti</text>
-    <text align="center">51017 Pescia PT</text>
-    <feed />
-    ${note}
-    ${items}
-    <feed />
-    <text align="center" dw="true" dh="true" em="true">RITIRO: ${esc(pickupTime)}</text>
-    <feed line="6" />
-    <cut type="feed" />
-  </epos-print>`;
+  const total = fmtMoney(order.total != null ? order.total : (order.items || []).reduce((s, i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0));
+  const payment = esc(order.payment_method || order.payment || 'N/A');
+  const dt = esc(fmtDateTime(order.created_at));
+  const cust = esc(order.customer_name || 'N/A');
+  const phone = esc(order.customer_phone || 'N/A');
+  const notes = order.notes ? `<text>Note: ${esc(order.notes)}&#10;</text>` : '';
+  let fulfill = '';
+  if (order.order_type === 'delivery') {
+    const addr = esc(order.delivery_address || order.address || 'N/A');
+    const when = order.delivery_timing === 'later' ? esc(order.delivery_time || 'ASAP') : 'ASAP';
+    fulfill = `<text align="left">Tipo: Consegna&#10;</text><text>Indirizzo: ${addr}&#10;</text><text>Orario: ${when}&#10;</text>`;
+  } else {
+    const when = esc(order.pickup_time || 'ASAP');
+    fulfill = `<text align="left">Tipo: Ritiro&#10;</text><text>Ritiro: ${when}&#10;</text>`;
+  }
+  return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">` +
+    `<text align="center" dw="true" dh="true">ALI KEBAB&#10;</text>` +
+    `<text align="center">--------------------------------&#10;</text>` +
+    `<text>Ordine: ${esc(order.order_number || order.id || '')}&#10;</text>` +
+    `<text>Data/Ora: ${dt}&#10;</text>` +
+    `<text>Cliente: ${cust}&#10;</text>` +
+    `<text>Telefono: ${phone}&#10;</text>` +
+    fulfill +
+    `<text align="center">--------------------------------&#10;</text>` +
+    items +
+    `<text align="center">--------------------------------&#10;</text>` +
+    `<text align="right" dw="true" dh="true">TOTALE: EUR ${esc(total)}&#10;</text>` +
+    `<text>Pagamento: ${payment}&#10;</text>` +
+    notes +
+    `<feed line="3"/><cut type="feed"/></epos-print>`;
 }
 
 function buildSoapEnvelope(xmlBody) {
@@ -204,35 +236,38 @@ function buildSoapEnvelope(xmlBody) {
 
 function soapPrint(xmlBody) {
   const soap = buildSoapEnvelope(xmlBody);
+  const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
   return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, {
     method: 'POST',
+    mode: 'cors',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'text/xml; charset=utf-8',
       'SOAPAction': '""',
       'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
     },
-    body: soap
-  });
+    body: soap,
+    signal: ctrl ? ctrl.signal : undefined
+  }).finally(() => { if (timer) clearTimeout(timer); });
 }
 
 function initPrinter() {
-  try {
-    printerConnected = true;
-    updatePrinterStatusUI(true);
-    return true;
-  } catch(e) {
-    printerConnected = false;
-    updatePrinterStatusUI(false);
-    showToast('Errore inizializzazione stampante: ' + e.message);
-    return false;
-  }
+  printerConnected = false;
+  updatePrinterStatusUI(false);
+  // probe direct reachability (may be blocked by browser mixed-content/CORS on HTTPS)
+  tryConnectPrinter().then(ok => {
+    printerConnected = !!ok;
+    updatePrinterStatusUI(printerConnected);
+  }).catch(() => { printerConnected = false; updatePrinterStatusUI(false); });
+  return true;
 }
 
 function updatePrinterStatusUI(connected) {
   const indicator = document.getElementById('printer-status-indicator');
   if (indicator) {
     indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
-    indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
+    indicator.title = connected ? 'Stampante raggiungibile: ' + PRINTER_IP : 'Stampante non raggiungibile: ' + PRINTER_IP;
   }
   if (els.printerStatusText) {
     els.printerStatusText.textContent = connected ? 'Connessa' : 'Non connessa';
@@ -240,35 +275,100 @@ function updatePrinterStatusUI(connected) {
   }
 }
 
-function sendToPrintAssistant(xml) {
-  const envelope = buildSoapEnvelope(xml);
-  const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + encodeURIComponent(envelope);
-  try {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
-    setTimeout(() => { try { document.body.removeChild(iframe); } catch(e) {} }, 1500);
-  } catch(e) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { try { document.body.removeChild(a); } catch(e) {} }, 1000);
-  }
+function withTimeout(promise, ms, label) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => rej(new Error((label || 'Operazione') + ' timeout (' + ms + 'ms)')), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
-function fallbackBrowserPrint(order) {
-  try {
-    const w = window.open('', '_blank');
-    if (!w) return false;
-    w.document.write('<pre style="font-family:monospace;font-size:12px;white-space:pre-wrap;">' + buildReceiptXML(order).replace(/<[^>]+>/g, '\n').replace(/\n+/g, '\n').trim() + '</pre>');
-    w.document.close();
-    w.focus();
-    w.print();
-    return true;
-  } catch(e) { return false; }
+function tryConnectPrinter() {
+  return new Promise((resolve) => {
+    const eps = window.epson;
+    if (!eps || !eps.ePOSDevice) return resolve(false);
+    try {
+      const dev = new eps.ePOSDevice();
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; try { dev.disconnect(); } catch(e) {} resolve(v); };
+      setTimeout(() => finish(false), 5000);
+      dev.connect(PRINTER_IP, 80, (res) => {
+        if (res === 'OK' || res === 'SSL_CONNECT_OK') finish(true);
+        else if (String(res).indexOf('OK') === -1) dev.connect(PRINTER_IP, 8008, (res2) => finish(res2 === 'OK' || res2 === 'SSL_CONNECT_OK'));
+        else finish(true);
+      });
+    } catch(e) { resolve(false); }
+  });
+}
+
+function printViaEposSDK(xml) {
+  return new Promise((resolve, reject) => {
+    const eps = window.epson;
+    if (!eps || !eps.ePOSDevice) return reject(new Error('Epson ePOS SDK non disponibile'));
+    let dev, printer, settled = false;
+    const fail = (msg) => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} reject(new Error(msg)); };
+    const ok = () => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} resolve(true); };
+    const timer = setTimeout(() => fail('Timeout connessione/stampa (' + PRINTER_IP + ')'), 12000);
+    const wrap = (fn) => (...a) => { clearTimeout(timer); return fn(...a); };
+    try {
+      dev = new eps.ePOSDevice();
+      const onConnect = wrap((res) => {
+        if (!(res === 'OK' || res === 'SSL_CONNECT_OK')) return fail('Connessione stampante fallita: ' + res + ' (' + PRINTER_IP + ')');
+        dev.createDevice('local_printer', dev.DEVICE_TYPE_PRINTER, { crypto: false, buffer: false }, (p, code) => {
+          if (code !== 'OK' || !p) return fail('Creazione device fallita: ' + code);
+          printer = p;
+          printer.timeout = 10000;
+          printer.onreceive = (resp) => {
+            if (resp && resp.success) ok();
+            else fail('Errore stampante: ' + ((resp && (resp.code || resp.status)) || 'risposta non valida'));
+          };
+          printer.onerror = (e) => fail('Errore ePOS: ' + (e && (e.message || e.status) || 'sconosciuto'));
+          printer.oncoveropen = () => fail('Errore stampante: coperchio aperto');
+          printer.onpaperend = () => fail('Errore stampante: carta esaurita');
+          printer.onpapernearend = () => { /* warning only */ };
+          try { printer.send(xml); }
+          catch(e) { fail('Invio fallito: ' + (e && e.message || e)); }
+        });
+      });
+      dev.connect(PRINTER_IP, 80, (res) => {
+        if (res === 'OK' || res === 'SSL_CONNECT_OK') return onConnect(res);
+        dev.connect(PRINTER_IP, 8008, (res2) => {
+          if (res2 === 'OK' || res2 === 'SSL_CONNECT_OK') return onConnect(res2);
+          clearTimeout(timer);
+          fail('Impossibile connettersi alla stampante ' + PRINTER_IP + ' (porte 80/8008): ' + res + '/' + res2);
+        });
+      });
+    } catch(e) { clearTimeout(timer); fail('Eccezione ePOS SDK: ' + (e && e.message || e)); }
+  });
+}
+
+function printViaHttp(xml) {
+  const tryFetch = (url, opts) => withTimeout(soapPrint(xml), 10000, 'Stampa HTTP').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; });
+  // soapPrint uses PRINTER_URL; ensure it targets printer IP
+  return withTimeout(soapPrint(xml), 10000, 'Stampa HTTP').then(r => {
+    if (!r.ok) throw new Error('Risposta stampante HTTP ' + r.status);
+    return r.text().catch(() => '').then(t => {
+      if (t && /success|ok/i.test(t) && !/fail|error/i.test(t)) return true;
+      if (t && /fail|error/i.test(t)) throw new Error('Errore stampante: ' + t.slice(0, 120));
+      return true; // assume accepted if 2xx
+    });
+  });
+}
+
+function explainPrintBlock(err) {
+  const msg = String(err && err.message || err || '');
+  const https = (typeof location !== 'undefined' && location.protocol === 'https:');
+  if (https) return msg + ' — Blocco browser: da pagina HTTPS non è possibile inviare richieste dirette a http://' + PRINTER_IP + ' (mixed content) e la rete locale può essere bloccata da CORS. Per stampa diretta automatica serve servire la dashboard in HTTP sulla stessa rete della stampante o un relay locale che inoltri a ' + PRINTER_IP + '.';
+  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Verifica che la stampante ' + PRINTER_IP + ' sia raggiungibile sulla rete, ePOS abilitato, e che CORS/rete consentano la connessione.';
+  return msg;
+}
+
+function directPrint(order) {
+  const xml = buildReceiptXML(order);
+  // try SDK first, then HTTP ePOS endpoint
+  return printViaEposSDK(xml).catch(e1 => printViaHttp(xml).catch(e2 => {
+    const err = new Error(explainPrintBlock(e1) + ' | HTTP: ' + String(e2 && e2.message || e2));
+    err.primary = e1; err.secondary = e2;
+    throw err;
+  }));
 }
 
 function randomTestOrder() {
@@ -299,7 +399,10 @@ function randomTestOrder() {
     delivery_timing: isPickup ? null : (Math.random() < 0.5 ? 'later' : 'now'),
     delivery_time: !isPickup && Math.random() < 0.5 ? pick(times.slice(1)) : null,
     pickup_time: isPickup ? pick(times) : null,
+    delivery_address: isPickup ? null : 'Via Roma ' + (1 + Math.floor(Math.random() * 50)) + ', Pescia',
     notes: Math.random() < 0.4 ? pick(['Senza cipolla','Extra piccante','Salsa a parte','Ben cotto']) : '',
+    payment_method: pick(['Contanti', 'Carta', 'N/A']),
+    created_at: new Date().toISOString(),
     items,
     total
   };
@@ -307,29 +410,31 @@ function randomTestOrder() {
 
 function testPrinterConnection() {
   const order = randomTestOrder();
-  try {
-    sendToPrintAssistant(buildReceiptXML(order));
-    showToast('Stampa test inviata: ' + order.order_number + '. Se non parte, installa/apri Epson TM Print Assistant.');
-  } catch(e) {
-    showToast('Errore stampa test: ' + e.message);
-  }
+  printOrder(order);
 }
 
 function printOrder(order) {
   if (!order) return;
   const key = String(order.id);
-  printedOrders.set(key, { status: 'pending', attempts: ((printedOrders.get(key) || {}).attempts || 0) + 1 });
-  renderOrders();
-  try {
-    sendToPrintAssistant(buildReceiptXML(order));
-    printedOrders.set(key, { status: 'printed', attempts: (printedOrders.get(key) || {}).attempts || 1 });
-    showToast('Stampa inviata: ' + (order.order_number || order.id) + '. Se non parte, apri TM Print Assistant.');
-  } catch(e) {
-    const ok = fallbackBrowserPrint(order);
-    printedOrders.set(key, { status: ok ? 'printed' : 'failed', attempts: (printedOrders.get(key) || {}).attempts || 1, error: e.message });
-    showToast(ok ? 'Stampato via browser (fallback)' : 'Errore stampa: ' + e.message);
+  const prev = printedOrders.get(key);
+  if (prev && prev.status === 'pending') {
+    showToast('Stampa già in corso: ' + (order.order_number || order.id));
+    return;
   }
+  const attempts = ((prev && prev.attempts) || 0) + 1;
+  printedOrders.set(key, { status: 'pending', attempts, error: null });
   renderOrders();
+  showToast('Invio stampa a ' + PRINTER_IP + ': ' + (order.order_number || order.id) + '...');
+  directPrint(order).then(() => {
+    printedOrders.set(key, { status: 'printed', attempts, error: null });
+    printerConnected = true; updatePrinterStatusUI(true);
+    showToast('Stampato: ' + (order.order_number || order.id));
+  }).catch(err => {
+    printedOrders.set(key, { status: 'failed', attempts, error: err && err.message || String(err) });
+    printerConnected = false; updatePrinterStatusUI(false);
+    console.error('Print error', err);
+    showToast('Stampa fallita: ' + (err && err.message || err));
+  }).finally(() => { renderOrders(); });
 }
 
 function printReceiptEpson(order) {
@@ -452,7 +557,7 @@ function renderOrders() {
     const pstatus = pinfo ? pinfo.status : null;
     let pbadge = '';
     if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Stampato">\u2705</span>';
-    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="Stampa fallita - clicca per riprovare" onclick="event.stopPropagation(); printOrder(' + JSON.stringify(o) + ')">\u274c</span>';
+    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="' + esc((pinfo && pinfo.error) || 'Stampa fallita - clicca per riprovare') + '" onclick="event.stopPropagation(); printOrder(' + esc(JSON.stringify(o)) + ')">\u274c</span>';
     else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Stampa in corso">\ud83d\uddf0</span>';
     else if (o.status === 'new') pbadge = '<span class="print-badge pending" title="Nuovo - stampa all\'accettazione">\ud83d\udce9</span>';
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
