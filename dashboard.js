@@ -242,7 +242,6 @@ function buildReceiptXML(order) {
     return `<text>${l1}&#10;${l2}&#10;</text>`;
   }).join('');
   const total = fmtMoney(order.total != null ? order.total : (order.items || []).reduce((s, i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0));
-  const payment = esc(order.payment_method || order.payment || 'N/A');
   const dt = esc(fmtDateTime(order.created_at));
   const cust = esc(order.customer_name || 'N/A');
   const phone = esc(order.customer_phone || 'N/A');
@@ -268,9 +267,8 @@ function buildReceiptXML(order) {
     items +
     `<text align="center">--------------------------------&#10;</text>` +
     `<text align="right" dw="true">TOTALE: EUR ${esc(total)}&#10;</text>` +
-    `<text>Pagamento: ${payment}&#10;</text>` +
     notes +
-    `<feed line="2"/><cut type="feed"/></epos-print>`;
+    `<feed line="5"/><cut type="feed"/></epos-print>`;
 }
 
 function buildSoapEnvelope(xmlBody) {
