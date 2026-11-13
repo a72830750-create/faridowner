@@ -549,47 +549,6 @@ function directPrint(order) {
   }));
 }
 
-function randomTestOrder() {
-  const names = ['Mario Rossi','Luca Bianchi','Sara Verdi','Ali Khan','Giulia Neri','Paolo Conti'];
-  const menu = [
-    { name: 'Panino Kebab', price: 6.0 },
-    { name: 'Piadina Kebab', price: 6.5 },
-    { name: 'Kebab Box', price: 8.0 },
-    { name: 'Patatine', price: 3.0 },
-    { name: 'Coca Cola', price: 2.0 },
-    { name: 'Acqua', price: 1.0 }
-  ];
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  const count = 1 + Math.floor(Math.random() * 4);
-  const items = Array.from({ length: count }, () => {
-    const m = pick(menu);
-    return { qty: 1 + Math.floor(Math.random() * 3), name: m.name, price: m.price };
-  });
-  const total = items.reduce((s, i) => s + i.qty * i.price, 0);
-  const isPickup = Math.random() < 0.5;
-  const times = ['ASAP','19:30','20:00','20:30','21:00'];
-  return {
-    id: 'test-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
-    order_number: 'TEST-' + String(Math.floor(1000 + Math.random() * 9000)),
-    customer_name: pick(names),
-    customer_phone: '3' + String(Math.floor(100000000 + Math.random() * 900000000)),
-    order_type: isPickup ? 'pickup' : 'delivery',
-    delivery_timing: isPickup ? null : (Math.random() < 0.5 ? 'later' : 'now'),
-    delivery_time: !isPickup && Math.random() < 0.5 ? pick(times.slice(1)) : null,
-    pickup_time: isPickup ? pick(times) : null,
-    delivery_address: isPickup ? null : 'Via Roma ' + (1 + Math.floor(Math.random() * 50)) + ', Pescia',
-    notes: Math.random() < 0.4 ? pick(['Senza cipolla','Extra piccante','Salsa a parte','Ben cotto']) : '',
-    payment_method: pick(['Contanti', 'Carta', 'N/A']),
-    created_at: new Date().toISOString(),
-    items,
-    total
-  };
-}
-
-function testPrinterConnection() {
-  const order = randomTestOrder();
-  printOrder(order, { force: true });
-}
 
 function printOrder(order, opts) {
   if (!order) return Promise.resolve();
@@ -944,7 +903,6 @@ setInterval(() => {
 // Expose printer functions globally for inline HTML onclick
 window.initPrinter = initPrinter;
 window.setStatus = setStatus;
-window.testPrinterConnection = testPrinterConnection;
 window.printReceiptEpson = printReceiptEpson;
 window.printOrder = printOrder;
 
@@ -986,8 +944,6 @@ const printerSettingsModal = document.getElementById('printer-settings-modal');
 if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => {
   if (e.target === printerSettingsModal) printerSettingsModal.classList.add('hidden');
 });
-const printerTestBtn = document.getElementById('printer-test-btn');
-if (printerTestBtn) printerTestBtn.addEventListener('click', testPrinterConnection);
 const autoPrintToggle = document.getElementById('auto-print-toggle');
 if (autoPrintToggle) {
   autoPrintToggle.checked = !!autoPrintEnabled;
