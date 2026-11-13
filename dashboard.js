@@ -298,51 +298,32 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
-function tryConnectPrinter() {
-  return new Promise((resolve) => {
-    const eps = window.epson;
-    if (!eps || !eps.ePOSDevice) return resolve(false);
-    try {
-      const dev = new eps.ePOSDevice();
-      let done = false;
-      const finish = (v) => { if (done) return; done = true; try { dev.disconnect(); } catch(e) {} resolve(v); };
-      setTimeout(() => finish(false), 5000);
-      dev.connect(PRINTER_IP, 80, (res) => {
-        if (res === 'OK' || res === 'SSL_CONNECT_OK') finish(true);
-        else if (String(res).indexOf('OK') === -1) dev.connect(PRINTER_IP, 8008, (res2) => finish(res2 === 'OK' || res2 === 'SSL_CONNECT_OK'));
-        else finish(true);
-      });
-    } catch(e) { resolve(false); }
-  });
+let _eposDev = null, _eposPrinter = null, _eposConnecting = null;
+
+function resetEposConnection() {
+  try { if (_eposDev) _eposDev.disconnect(); } catch(e) {}
+  _eposDev = null; _eposPrinter = null; _eposConnecting = null;
 }
 
-function printViaEposSDK(xml) {
-  return new Promise((resolve, reject) => {
-    const eps = window.epson;
-    if (!eps || !eps.ePOSDevice) return reject(new Error('Epson ePOS SDK non disponibile'));
-    let dev, printer, settled = false;
-    const fail = (msg) => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} reject(new Error(msg)); };
-    const ok = () => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} resolve(true); };
-    const timer = setTimeout(() => fail('Timeout connessione/stampa (' + PRINTER_IP + ')'), 12000);
+function getEposPrinter() {
+  if (_eposPrinter && _eposDev) return Promise.resolve(_eposPrinter);
+  if (_eposConnecting) return _eposConnecting;
+  const eps = window.epson;
+  if (!eps || !eps.ePOSDevice) return Promise.reject(new Error('Epson ePOS SDK non disponibile'));
+  _eposConnecting = new Promise((resolve, reject) => {
+    let dev, settled = false;
+    const fail = (msg) => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} _eposDev = null; _eposPrinter = null; _eposConnecting = null; reject(new Error(msg)); };
+    const timer = setTimeout(() => fail('Timeout connessione stampante (' + PRINTER_IP + ')'), 8000);
     const wrap = (fn) => (...a) => { clearTimeout(timer); return fn(...a); };
     try {
       dev = new eps.ePOSDevice();
       const onConnect = wrap((res) => {
         if (!(res === 'OK' || res === 'SSL_CONNECT_OK')) return fail('Connessione stampante fallita: ' + res + ' (' + PRINTER_IP + ')');
-        dev.createDevice('local_printer', dev.DEVICE_TYPE_PRINTER, { crypto: false, buffer: false }, (p, code) => {
+        dev.createDevice(PRINTER_DEV_ID, dev.DEVICE_TYPE_PRINTER, { crypto: false, buffer: false }, (p, code) => {
           if (code !== 'OK' || !p) return fail('Creazione device fallita: ' + code);
-          printer = p;
-          printer.timeout = 10000;
-          printer.onreceive = (resp) => {
-            if (resp && resp.success) ok();
-            else fail('Errore stampante: ' + ((resp && (resp.code || resp.status)) || 'risposta non valida'));
-          };
-          printer.onerror = (e) => fail('Errore ePOS: ' + (e && (e.message || e.status) || 'sconosciuto'));
-          printer.oncoveropen = () => fail('Errore stampante: coperchio aperto');
-          printer.onpaperend = () => fail('Errore stampante: carta esaurita');
-          printer.onpapernearend = () => { /* warning only */ };
-          try { printer.send(xml); }
-          catch(e) { fail('Invio fallito: ' + (e && e.message || e)); }
+          p.timeout = 10000;
+          _eposDev = dev; _eposPrinter = p; _eposConnecting = null;
+          resolve(p);
         });
       });
       dev.connect(PRINTER_IP, 80, (res) => {
@@ -355,6 +336,32 @@ function printViaEposSDK(xml) {
       });
     } catch(e) { clearTimeout(timer); fail('Eccezione ePOS SDK: ' + (e && e.message || e)); }
   });
+  return _eposConnecting;
+}
+
+function tryConnectPrinter() {
+  // warm up reusable SDK connection in background to reduce first-print delay
+  return getEposPrinter().then(() => true).catch(() => false);
+}
+
+function printViaEposSDK(xml) {
+  return getEposPrinter().then(printer => new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (msg) => { if (settled) return; settled = true; resetEposConnection(); reject(new Error(msg)); };
+    const ok = () => { if (settled) return; settled = true; resolve(true); };
+    const timer = setTimeout(() => fail('Timeout stampa (' + PRINTER_IP + ')'), 10000);
+    const done = (fn) => (...a) => { clearTimeout(timer); return fn(...a); };
+    printer.onreceive = done((resp) => {
+      if (resp && resp.success) ok();
+      else fail('Errore stampante: ' + ((resp && (resp.code || resp.status)) || 'risposta non valida'));
+    });
+    printer.onerror = done((e) => fail('Errore ePOS: ' + (e && (e.message || e.status) || 'sconosciuto')));
+    printer.oncoveropen = done(() => fail('Errore stampante: coperchio aperto'));
+    printer.onpaperend = done(() => fail('Errore stampante: carta esaurita'));
+    printer.onpapernearend = () => { /* warning only */ };
+    try { printer.send(xml); }
+    catch(e) { done(fail)('Invio fallito: ' + (e && e.message || e)); }
+  }));
 }
 
 function printViaHttp(xml) {
@@ -388,9 +395,9 @@ function explainPrintBlock(err) {
 function directPrint(order) {
   const xml = buildReceiptXML(order);
   getLnaPermissionState().then(s => console.log('LNA local-network permission:', s, 'targetAddressSpace supported:', lnaFetchSupported(), 'secure:', (typeof isSecureContext !== 'undefined' ? isSecureContext : 'n/a')));
-  // try SDK first (may not honor LNA targetAddressSpace), then HTTP ePOS endpoint with LNA opts
-  return printViaEposSDK(xml).catch(e1 => printViaHttp(xml).catch(e2 => {
-    const err = new Error(explainPrintBlock(e1) + ' | HTTP: ' + String(e2 && e2.message || e2));
+  // try HTTP ePOS endpoint first (fast success/fail), then reused SDK connection as fallback
+  return printViaHttp(xml).catch(e1 => printViaEposSDK(xml).catch(e2 => {
+    const err = new Error(explainPrintBlock(e1) + ' | SDK: ' + String(e2 && e2.message || e2));
     err.primary = e1; err.secondary = e2;
     throw err;
   }));
