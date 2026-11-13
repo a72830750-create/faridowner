@@ -356,8 +356,8 @@ function printViaHttp(xml) {
 function explainPrintBlock(err) {
   const msg = String(err && err.message || err || '');
   const https = (typeof location !== 'undefined' && location.protocol === 'https:');
-  if (https) return msg + ' — Blocco browser: da pagina HTTPS non è possibile inviare richieste dirette a http://' + PRINTER_IP + ' (mixed content) e la rete locale può essere bloccata da CORS. Per stampa diretta automatica serve servire la dashboard in HTTP sulla stessa rete della stampante o un relay locale che inoltri a ' + PRINTER_IP + '.';
-  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Verifica che la stampante ' + PRINTER_IP + ' sia raggiungibile sulla rete, ePOS abilitato, e che CORS/rete consentano la connessione.';
+  if (https) return msg + ' — Blocked by browser security: a public HTTPS page cannot directly reach http://' + PRINTER_IP + '/cgi-bin/epos/service.cgi (active mixed content). On Android Chrome, Private Network Access/CORS also requires the printer to answer preflight headers it does not provide, so direct LAN printing is prevented. App-free automatic printing from this HTTPS dashboard to a LAN HTTP printer is not possible without a local relay/app or serving the dashboard over HTTP on the same LAN.';
+  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Check that printer ' + PRINTER_IP + ' is reachable on the same network, ePOS is enabled, and network access is allowed.';
   return msg;
 }
 
