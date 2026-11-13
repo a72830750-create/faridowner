@@ -6,8 +6,14 @@ const PRINTER_IP = '192.168.178.148';
 const PRINTER_URL = 'http://192.168.178.148/cgi-bin/epos/service.cgi';
 const PRINTER_DEV_ID = 'local_printer';
 let printerConnected = false;
-let autoPrintEnabled = true;
+let autoPrintEnabled = (function(){ try { const v = localStorage.getItem('autoPrintEnabled'); return v === null ? true : v === '1'; } catch(e){ return true; } })();
 let printedOrders = new Map(); // orderId → {status:'pending'|'printed'|'failed', attempts, error?}
+let autoPrintedIds = new Set((function(){ try { return JSON.parse(localStorage.getItem('autoPrintedIds') || '[]'); } catch(e){ return []; } })());
+let printedIdsPersist = new Set((function(){ try { return JSON.parse(localStorage.getItem('printedIds') || '[]'); } catch(e){ return []; } })());
+function saveAutoPrintEnabled(){ try { localStorage.setItem('autoPrintEnabled', autoPrintEnabled ? '1' : '0'); } catch(e){} }
+function saveAutoPrintedIds(){ try { localStorage.setItem('autoPrintedIds', JSON.stringify(Array.from(autoPrintedIds).slice(-500))); } catch(e){} }
+function savePrintedIds(){ try { localStorage.setItem('printedIds', JSON.stringify(Array.from(printedIdsPersist).slice(-500))); } catch(e){} }
+function getPrintInfo(id){ const key=String(id); const m=printedOrders.get(key); if(m) return m; if(printedIdsPersist.has(key)) return {status:'printed', attempts:1}; return null; }
 
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
@@ -195,7 +201,7 @@ function buildReceiptXML(order) {
     const price = Number(i.price) || 0;
     const name = String(i.name || '');
     const l1 = esc(lineLR(qty + 'x ' + name, 'EUR ' + fmtMoney(qty * price), w));
-    const l2 = esc('   @ EUR ' + fmtMoney(price));
+    const l2 = esc('  @ EUR ' + fmtMoney(price));
     return `<text>${l1}&#10;${l2}&#10;</text>`;
   }).join('');
   const total = fmtMoney(order.total != null ? order.total : (order.items || []).reduce((s, i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0));
@@ -203,31 +209,31 @@ function buildReceiptXML(order) {
   const dt = esc(fmtDateTime(order.created_at));
   const cust = esc(order.customer_name || 'N/A');
   const phone = esc(order.customer_phone || 'N/A');
-  const notes = order.notes ? `<text>Note: ${esc(order.notes)}&#10;</text>` : '';
+  const notes = order.notes ? `<text>Note: ${esc(String(order.notes).slice(0, 120))}&#10;</text>` : '';
   let fulfill = '';
   if (order.order_type === 'delivery') {
-    const addr = esc(order.delivery_address || order.address || 'N/A');
+    const addr = esc(String(order.delivery_address || order.address || 'N/A').slice(0, 80));
     const when = order.delivery_timing === 'later' ? esc(order.delivery_time || 'ASAP') : 'ASAP';
-    fulfill = `<text align="left">Tipo: Consegna&#10;</text><text>Indirizzo: ${addr}&#10;</text><text>Orario: ${when}&#10;</text>`;
+    fulfill = `<text>Consegna: ${addr}&#10;</text><text>Orario: ${when}&#10;</text>`;
   } else {
     const when = esc(order.pickup_time || 'ASAP');
-    fulfill = `<text align="left">Tipo: Ritiro&#10;</text><text>Ritiro: ${when}&#10;</text>`;
+    fulfill = `<text>Ritiro: ${when}&#10;</text>`;
   }
   return `<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">` +
-    `<text align="center" dw="true" dh="true">ALI KEBAB&#10;</text>` +
+    `<text align="center" dw="true">ALI KEBAB&#10;</text>` +
     `<text align="center">--------------------------------&#10;</text>` +
     `<text>Ordine: ${esc(order.order_number || order.id || '')}&#10;</text>` +
-    `<text>Data/Ora: ${dt}&#10;</text>` +
+    `<text>Data: ${dt}&#10;</text>` +
     `<text>Cliente: ${cust}&#10;</text>` +
-    `<text>Telefono: ${phone}&#10;</text>` +
+    `<text>Tel: ${phone}&#10;</text>` +
     fulfill +
     `<text align="center">--------------------------------&#10;</text>` +
     items +
     `<text align="center">--------------------------------&#10;</text>` +
-    `<text align="right" dw="true" dh="true">TOTALE: EUR ${esc(total)}&#10;</text>` +
+    `<text align="right" dw="true">TOTALE: EUR ${esc(total)}&#10;</text>` +
     `<text>Pagamento: ${payment}&#10;</text>` +
     notes +
-    `<feed line="3"/><cut type="feed"/></epos-print>`;
+    `<feed line="2"/><cut type="feed"/></epos-print>`;
 }
 
 function buildSoapEnvelope(xmlBody) {
@@ -365,16 +371,34 @@ function printViaEposSDK(xml) {
 }
 
 function printViaHttp(xml) {
-  const tryFetch = (url, opts) => withTimeout(soapPrint(xml), 10000, 'Stampa HTTP').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; });
-  // soapPrint uses PRINTER_URL; ensure it targets printer IP
-  return withTimeout(soapPrint(xml), 10000, 'Stampa HTTP').then(r => {
-    if (!r.ok) throw new Error('Risposta stampante HTTP ' + r.status);
+  return soapPrint(xml).then(r => {
+    if (!r.ok) throw new Error('Printer HTTP error ' + r.status);
     return r.text().catch(() => '').then(t => {
-      if (t && /success|ok/i.test(t) && !/fail|error/i.test(t)) return true;
-      if (t && /fail|error/i.test(t)) throw new Error('Errore stampante: ' + t.slice(0, 120));
-      return true; // assume accepted if 2xx
+      const body = String(t || '');
+      // Require positive confirmation; never mark printed without it.
+      if (/success\s*=\s*["']?true["']?|<success>\s*true\s*<\/success>|<ePOSPrint>[\s\S]*?<response[^>]*success\s*=\s*["']?true/i.test(body)) return true;
+      if (/code\s*=\s*["']?(?:OK|0|SUCCESS)["']?/i.test(body) && !/success\s*=\s*["']?false|<success>\s*false|error/i.test(body)) return true;
+      if (/success\s*=\s*["']?false|<success>\s*false|<error|status\s*=\s*["']?(?:ERR|FAIL)/i.test(body)) {
+        const m = body.match(/<status>([^<]+)<\/status>|code\s*=\s*["']?([^"'\s>]+)/i);
+        throw new Error('Printer error: ' + ((m && (m[1] || m[2])) || body.slice(0, 80)));
+      }
+      // 2xx but no explicit success confirmation
+      throw new Error('No print confirmation received from printer');
     });
   });
+}
+
+function friendlyPrintError(err) {
+  const msg = String(err && err.message || err || 'Unknown error');
+  if (/paper\s*(end|out)|carta esaurita/i.test(msg)) return 'Printer out of paper. Add paper and retry.';
+  if (/paper\s*near/i.test(msg)) return 'Printer paper is low.';
+  if (/cover\s*open|coperchio/i.test(msg)) return 'Printer cover is open. Close it and retry.';
+  if (/Timeout|timeout/i.test(msg)) return 'Printer timed out. Check connection/power and retry.';
+  if (/Impossibile connettersi|Connessione stampante fallita|unreachable|not reachable|offline|disconnected/i.test(msg)) return 'Printer cannot be reached at ' + PRINTER_IP + '. Check Wi-Fi/power and retry.';
+  if (/No print confirmation/i.test(msg)) return 'Printer did not confirm printing. Check printer and retry.';
+  if (/NetworkError|Failed to fetch|Load failed|TypeError:.*fetch|CORS/i.test(msg)) return 'Cannot reach printer from this browser/network. Check local network access or connection.';
+  if (/HTTPS|mixed content|targetAddressSpace|local-network/i.test(msg)) return 'Browser blocked direct access to the local printer. Check local network permission and printer availability.';
+  return msg.length > 140 ? msg.slice(0, 137) + '...' : msg;
 }
 
 function explainPrintBlock(err) {
@@ -382,13 +406,12 @@ function explainPrintBlock(err) {
   const https = (typeof location !== 'undefined' && location.protocol === 'https:');
   const lna = lnaFetchSupported();
   if (https) {
-    let hint = msg + ' — HTTPS→LAN direct print (http://' + PRINTER_IP + '/cgi-bin/epos/service.cgi).';
-    hint += ' Chrome 142+ LNA: private IP literals and fetch with targetAddressSpace:"local" can be mixed-content exempt and trigger a local-network permission prompt from a user gesture on supported browsers (incl. Android Chrome 142+), but the ePOS response must also satisfy CORS for JS to read success/failure.';
-    hint += ' If no permission prompt appeared, LNA may be unsupported/blocked (permission state: see console) or the request was not eligible. If prompt was allowed but request still fails, likely CORS: printer/service.cgi must return Access-Control-Allow-Origin/headers for this origin and handle preflight OPTIONS — TM-m30III ePOS endpoint CORS is not generally user-configurable in WebConfig (enable ePOS-Print in printer WebConfig; CORS headers on service.cgi are typically firmware-controlled).';
-    hint += ' lnaFetchSupported=' + lna + '. Fully app/relay/PC-free automatic printing from public HTTPS remains blocked if the printer does not permit CORS.';
+    let hint = msg;
+    hint += ' (HTTPS to local printer ' + PRINTER_IP + '. On supported Chrome/Android, allow local network permission when prompted; if still blocked, printer/network may not allow browser access.)';
+    hint += ' lna=' + lna;
     return hint;
   }
-  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Check that printer ' + PRINTER_IP + ' is reachable on the same network, ePOS is enabled, and network/CORS allow the connection.';
+  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Check that printer ' + PRINTER_IP + ' is reachable, ePOS enabled, and network allows connection.';
   return msg;
 }
 
@@ -397,7 +420,7 @@ function directPrint(order) {
   getLnaPermissionState().then(s => console.log('LNA local-network permission:', s, 'targetAddressSpace supported:', lnaFetchSupported(), 'secure:', (typeof isSecureContext !== 'undefined' ? isSecureContext : 'n/a')));
   // try HTTP ePOS endpoint first (fast success/fail), then reused SDK connection as fallback
   return printViaHttp(xml).catch(e1 => printViaEposSDK(xml).catch(e2 => {
-    const err = new Error(explainPrintBlock(e1) + ' | SDK: ' + String(e2 && e2.message || e2));
+    const err = new Error(explainPrintBlock(e2 && e2.message ? e2 : e1));
     err.primary = e1; err.secondary = e2;
     throw err;
   }));
@@ -445,27 +468,37 @@ function testPrinterConnection() {
   printOrder(order);
 }
 
-function printOrder(order) {
-  if (!order) return;
+function printOrder(order, opts) {
+  if (!order) return Promise.resolve();
+  opts = opts || {};
   const key = String(order.id);
-  const prev = printedOrders.get(key);
+  const prev = getPrintInfo(order.id);
+  const isAuto = !!opts.auto;
   if (prev && prev.status === 'pending') {
     showToast('Stampa già in corso: ' + (order.order_number || order.id));
-    return;
+    return Promise.resolve();
   }
+  if (isAuto && (autoPrintedIds.has(key) || printedIdsPersist.has(key) || (prev && prev.status === 'printed'))) {
+    return Promise.resolve();
+  }
+  if (isAuto) { autoPrintedIds.add(key); saveAutoPrintedIds(); }
   const attempts = ((prev && prev.attempts) || 0) + 1;
   printedOrders.set(key, { status: 'pending', attempts, error: null });
   renderOrders();
-  showToast('Invio stampa a ' + PRINTER_IP + ': ' + (order.order_number || order.id) + '...');
-  directPrint(order).then(() => {
+  showToast('Stampa in corso: ' + (order.order_number || order.id) + '...');
+  return directPrint(order).then(() => {
     printedOrders.set(key, { status: 'printed', attempts, error: null });
+    printedIdsPersist.add(key); savePrintedIds();
     printerConnected = true; updatePrinterStatusUI(true);
     showToast('Stampato: ' + (order.order_number || order.id));
+    return true;
   }).catch(err => {
-    printedOrders.set(key, { status: 'failed', attempts, error: err && err.message || String(err) });
+    const friendly = friendlyPrintError(err);
+    printedOrders.set(key, { status: 'failed', attempts, error: friendly });
     printerConnected = false; updatePrinterStatusUI(false);
     console.error('Print error', err);
-    showToast('Stampa fallita: ' + (err && err.message || err));
+    showToast('Stampa non riuscita: ' + friendly);
+    return false;
   }).finally(() => { renderOrders(); });
 }
 
@@ -486,8 +519,10 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     showToast('Ordine ' + o.order_number + ' \u2192 ' + status);
-    if (status === 'preparing' && autoPrintEnabled) {
-      printOrder(o);
+    const _prevPS = String(prev || '').toLowerCase();
+    const _newPS = String(status || '').toLowerCase();
+    if (_newPS === 'preparing' && _prevPS !== 'preparing' && autoPrintEnabled) {
+      printOrder(o, { auto: true });
     }
     if (currentStatus !== 'all') {
       currentStatus = status;
@@ -585,13 +620,14 @@ function renderOrders() {
   filtered.forEach(o => {
     const card = document.createElement('div');
     const waiting = o.status === 'new' && (Date.now() - new Date(o.created_at).getTime()) > 300000;
-    const pinfo = printedOrders.get(String(o.id));
+    const pinfo = getPrintInfo(o.id);
     const pstatus = pinfo ? pinfo.status : null;
     let pbadge = '';
-    if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Stampato">\u2705</span>';
-    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="' + esc((pinfo && pinfo.error) || 'Stampa fallita - clicca per riprovare') + '" onclick="event.stopPropagation(); printOrder(' + esc(JSON.stringify(o)) + ')">\u274c</span>';
-    else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Stampa in corso">\ud83d\uddf0</span>';
-    else if (o.status === 'new') pbadge = '<span class="print-badge pending" title="Nuovo - stampa all\'accettazione">\ud83d\udce9</span>';
+    if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Stampato">\u2705 Stampato</span>';
+    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="' + esc((pinfo && pinfo.error) || 'Stampa fallita') + '">Stampa fallita</span>';
+    else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Stampa in corso">Stampa...</span>';
+    const printDisabled = pstatus === 'pending';
+    const printLabel = pstatus === 'pending' ? 'Stampa...' : (pstatus === 'failed' ? 'Riprova' : 'Stampa');
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
     if (o._saving) card.classList.add('saving');
     card.innerHTML = `
@@ -615,7 +651,7 @@ function renderOrders() {
         <div class="order-total">\u20ac${Number(o.total).toFixed(2)}</div>
         <div class="order-actions">
           <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
-          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}">Stampa</button>
+          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}" ${printDisabled ? 'disabled' : ''}>${printLabel}</button>
           ${o.status === 'new' ? '<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>' : ''}
           ${o.status === 'accepted' ? '<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>' : ''}
           ${o.status === 'preparing' ? '<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" onclick="setStatus(\'' + o.id + '\',\'ready\',this)">Segna pronto</button>' : ''}
@@ -791,3 +827,8 @@ if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => 
 });
 const printerTestBtn = document.getElementById('printer-test-btn');
 if (printerTestBtn) printerTestBtn.addEventListener('click', testPrinterConnection);
+const autoPrintToggle = document.getElementById('auto-print-toggle');
+if (autoPrintToggle) {
+  autoPrintToggle.checked = !!autoPrintEnabled;
+  autoPrintToggle.addEventListener('change', () => { autoPrintEnabled = !!autoPrintToggle.checked; saveAutoPrintEnabled(); showToast(autoPrintEnabled ? 'Stampa automatica attiva' : 'Stampa automatica disattiva'); });
+}
