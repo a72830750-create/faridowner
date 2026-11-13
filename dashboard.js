@@ -785,6 +785,7 @@ els.loginForm.addEventListener('submit', e => {
     showDashboard();
     loadAndRender();
     initPrinter();
+    refreshAcceptingOrders();
   }).catch(() => {
     els.loginError.textContent = 'Nome utente o password non validi.';
     els.loginError.classList.remove('hidden');
@@ -907,8 +908,50 @@ window.printReceiptEpson = printReceiptEpson;
 window.printOrder = printOrder;
 
 // Toggle accepting orders
-const toggleBtn = document.createElement("button"); toggleBtn.textContent = "Toggle Orders"; toggleBtn.className = "btn btn-ghost btn-sm"; toggleBtn.style.position = "fixed"; toggleBtn.style.bottom = "20px"; toggleBtn.style.right = "20px"; toggleBtn.style.zIndex = "9999"; document.body.appendChild(toggleBtn);
-toggleBtn.addEventListener("click", async () => { if (!confirm("Sei sicuro?")) return; const t = sessionStorage.getItem("forno99_token"); const r = await fetch((window.API_BASE || "") + "/api/settings", { headers: { Authorization: "Bearer " + t } }); const d = await r.json(); const next = d.accepting_orders === "false" ? "true" : "false"; await fetch((window.API_BASE || "") + "/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t }, body: JSON.stringify({ key: "accepting_orders", value: next }) }); });
+async function refreshAcceptingOrders() {
+  const btn = document.getElementById('toggle-orders-btn');
+  if (!btn) return;
+  const t = sessionStorage.getItem('forno99_token');
+  if (!t) return;
+  try {
+    const r = await authFetch((window.API_BASE || '') + '/api/settings', { headers: { Authorization: 'Bearer ' + t } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const open = String(d.accepting_orders) !== 'false';
+    btn.textContent = open ? 'Ordini: Aperti' : 'Ordini: Chiusi';
+    btn.dataset.accepting = open ? 'true' : 'false';
+    btn.classList.toggle('btn-danger', !open);
+    btn.classList.toggle('btn-success', open);
+  } catch (e) {
+    btn.textContent = 'Ordini: ?';
+  }
+}
+const toggleOrdersBtn = document.getElementById('toggle-orders-btn');
+if (toggleOrdersBtn) toggleOrdersBtn.addEventListener('click', async () => {
+  const t = sessionStorage.getItem('forno99_token');
+  if (!t) { showToast('Sessione scaduta'); return; }
+  if (!confirm('Sei sicuro di voler cambiare lo stato degli ordini?')) return;
+  toggleOrdersBtn.disabled = true;
+  try {
+    const r = await authFetch((window.API_BASE || '') + '/api/settings', { headers: { Authorization: 'Bearer ' + t } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const next = String(d.accepting_orders) === 'false' ? 'true' : 'false';
+    const pr = await authFetch((window.API_BASE || '') + '/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t },
+      body: JSON.stringify({ key: 'accepting_orders', value: next })
+    });
+    if (!pr.ok) throw new Error('HTTP ' + pr.status);
+    await refreshAcceptingOrders();
+    showToast(next === 'true' ? 'Ordini aperti' : 'Ordini chiusi');
+  } catch (e) {
+    console.error('toggle orders failed', e);
+    showToast('Errore aggiornamento ordini');
+  } finally {
+    toggleOrdersBtn.disabled = false;
+  }
+});
 
 const earningsTabs = document.getElementById('earnings-tabs');
 if (earningsTabs) earningsTabs.addEventListener('click', e => {
@@ -924,7 +967,7 @@ const ef = document.getElementById('earn-from'); const et = document.getElementB
 if (ef) ef.addEventListener('change', renderEarnings);
 if (et) et.addEventListener('change', renderEarnings);
 function initAuth() {
-  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); }
+  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); refreshAcceptingOrders(); }
   else showLogin();
 }
 const noAccept = document.getElementById('no-accept');
