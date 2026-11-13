@@ -234,11 +234,23 @@ function buildSoapEnvelope(xmlBody) {
   return `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>${xmlBody}</s:Body></s:Envelope>`;
 }
 
+async function getLnaPermissionState() {
+  try {
+    if (!navigator.permissions || !navigator.permissions.query) return 'unsupported';
+    const r = await navigator.permissions.query({ name: 'local-network' });
+    return r && r.state || 'unknown';
+  } catch(e) { return 'unsupported'; }
+}
+
+function lnaFetchSupported() {
+  try { return typeof Request !== 'undefined' && 'targetAddressSpace' in Request.prototype; } catch(e) { return false; }
+}
+
 function soapPrint(xmlBody) {
   const soap = buildSoapEnvelope(xmlBody);
   const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
-  return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, {
+  const opts = {
     method: 'POST',
     mode: 'cors',
     cache: 'no-store',
@@ -249,7 +261,12 @@ function soapPrint(xmlBody) {
     },
     body: soap,
     signal: ctrl ? ctrl.signal : undefined
-  }).finally(() => { if (timer) clearTimeout(timer); });
+  };
+  // Chrome 142+ Local Network Access: declare target address space to allow prompt and
+  // mixed-content exemption for local/private IP literals from a secure context.
+  if (lnaFetchSupported()) opts.targetAddressSpace = 'local';
+  return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, opts)
+    .finally(() => { if (timer) clearTimeout(timer); });
 }
 
 function initPrinter() {
@@ -356,14 +373,22 @@ function printViaHttp(xml) {
 function explainPrintBlock(err) {
   const msg = String(err && err.message || err || '');
   const https = (typeof location !== 'undefined' && location.protocol === 'https:');
-  if (https) return msg + ' — Blocked by browser security: a public HTTPS page cannot directly reach http://' + PRINTER_IP + '/cgi-bin/epos/service.cgi (active mixed content). On Android Chrome, Private Network Access/CORS also requires the printer to answer preflight headers it does not provide, so direct LAN printing is prevented. App-free automatic printing from this HTTPS dashboard to a LAN HTTP printer is not possible without a local relay/app or serving the dashboard over HTTP on the same LAN.';
-  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Check that printer ' + PRINTER_IP + ' is reachable on the same network, ePOS is enabled, and network access is allowed.';
+  const lna = lnaFetchSupported();
+  if (https) {
+    let hint = msg + ' — HTTPS→LAN direct print (http://' + PRINTER_IP + '/cgi-bin/epos/service.cgi).';
+    hint += ' Chrome 142+ LNA: private IP literals and fetch with targetAddressSpace:"local" can be mixed-content exempt and trigger a local-network permission prompt from a user gesture on supported browsers (incl. Android Chrome 142+), but the ePOS response must also satisfy CORS for JS to read success/failure.';
+    hint += ' If no permission prompt appeared, LNA may be unsupported/blocked (permission state: see console) or the request was not eligible. If prompt was allowed but request still fails, likely CORS: printer/service.cgi must return Access-Control-Allow-Origin/headers for this origin and handle preflight OPTIONS — TM-m30III ePOS endpoint CORS is not generally user-configurable in WebConfig (enable ePOS-Print in printer WebConfig; CORS headers on service.cgi are typically firmware-controlled).';
+    hint += ' lnaFetchSupported=' + lna + '. Fully app/relay/PC-free automatic printing from public HTTPS remains blocked if the printer does not permit CORS.';
+    return hint;
+  }
+  if (/Failed to fetch|NetworkError|Load failed|CORS|TypeError/i.test(msg)) return msg + ' — Check that printer ' + PRINTER_IP + ' is reachable on the same network, ePOS is enabled, and network/CORS allow the connection.';
   return msg;
 }
 
 function directPrint(order) {
   const xml = buildReceiptXML(order);
-  // try SDK first, then HTTP ePOS endpoint
+  getLnaPermissionState().then(s => console.log('LNA local-network permission:', s, 'targetAddressSpace supported:', lnaFetchSupported(), 'secure:', (typeof isSecureContext !== 'undefined' ? isSecureContext : 'n/a')));
+  // try SDK first (may not honor LNA targetAddressSpace), then HTTP ePOS endpoint with LNA opts
   return printViaEposSDK(xml).catch(e1 => printViaHttp(xml).catch(e2 => {
     const err = new Error(explainPrintBlock(e1) + ' | HTTP: ' + String(e2 && e2.message || e2));
     err.primary = e1; err.secondary = e2;
