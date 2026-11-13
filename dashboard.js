@@ -5,15 +5,52 @@ const API = (window.API_BASE||'') + '/api/orders';
 const PRINTER_IP = '192.168.178.148';
 const PRINTER_URL = 'http://192.168.178.148/cgi-bin/epos/service.cgi';
 const PRINTER_DEV_ID = 'local_printer';
-let printerConnected = false;
+// printerState: 'unknown' | 'printing' | 'last_ok' | 'unreachable' | 'paper_out' | 'cover_open' | 'uncertain' (set only from verified events)
+let printerState = 'unknown';
+let printerStateDetail = '';
 let autoPrintEnabled = (function(){ try { const v = localStorage.getItem('autoPrintEnabled'); return v === null ? true : v === '1'; } catch(e){ return true; } })();
-let printedOrders = new Map(); // orderId → {status:'pending'|'printed'|'failed', attempts, error?}
+let printedOrders = new Map(); // orderId → {status:'pending'|'printed'|'failed'|'uncertain', attempts, error?, uncertain?}
 let autoPrintedIds = new Set((function(){ try { return JSON.parse(localStorage.getItem('autoPrintedIds') || '[]'); } catch(e){ return []; } })());
 let printedIdsPersist = new Set((function(){ try { return JSON.parse(localStorage.getItem('printedIds') || '[]'); } catch(e){ return []; } })());
+let uncertainPrintIds = new Set((function(){ try { return JSON.parse(localStorage.getItem('uncertainPrintIds') || '[]'); } catch(e){ return []; } })());
+const printTabId = Math.random().toString(36).slice(2);
+let printChannel = null;
+try { printChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('ali-kebab-print') : null; } catch(e) { printChannel = null; }
 function saveAutoPrintEnabled(){ try { localStorage.setItem('autoPrintEnabled', autoPrintEnabled ? '1' : '0'); } catch(e){} }
 function saveAutoPrintedIds(){ try { localStorage.setItem('autoPrintedIds', JSON.stringify(Array.from(autoPrintedIds).slice(-500))); } catch(e){} }
 function savePrintedIds(){ try { localStorage.setItem('printedIds', JSON.stringify(Array.from(printedIdsPersist).slice(-500))); } catch(e){} }
-function getPrintInfo(id){ const key=String(id); const m=printedOrders.get(key); if(m) return m; if(printedIdsPersist.has(key)) return {status:'printed', attempts:1}; return null; }
+function saveUncertainPrintIds(){ try { localStorage.setItem('uncertainPrintIds', JSON.stringify(Array.from(uncertainPrintIds).slice(-500))); } catch(e){} }
+function getPrintInfo(id){
+  const key=String(id);
+  const m=printedOrders.get(key); if(m) return m;
+  if(uncertainPrintIds.has(key)) return {status:'uncertain', attempts:1, error:'Outcome uncertain. Check printer before retry.'};
+  if(printedIdsPersist.has(key)) return {status:'printed', attempts:1};
+  return null;
+}
+function broadcastPrint(msg){ try { if (printChannel) printChannel.postMessage(Object.assign({ from: printTabId }, msg)); } catch(e){} }
+function markPrintedPersist(key){
+  key=String(key);
+  printedIdsPersist.add(key); uncertainPrintIds.delete(key);
+  savePrintedIds(); saveUncertainPrintIds();
+  broadcastPrint({ type:'printed', id:key });
+}
+function markUncertainPersist(key){
+  key=String(key);
+  uncertainPrintIds.add(key); saveUncertainPrintIds();
+  broadcastPrint({ type:'uncertain', id:key });
+}
+if (printChannel) {
+  printChannel.onmessage = (ev) => {
+    const d = ev && ev.data; if (!d || d.from === printTabId) return;
+    if (d.type === 'printed' && d.id) { printedIdsPersist.add(String(d.id)); uncertainPrintIds.delete(String(d.id)); const cur=printedOrders.get(String(d.id)); if (cur && cur.status !== 'printed') printedOrders.set(String(d.id), {status:'printed', attempts:cur.attempts||1}); renderOrders(); }
+    if (d.type === 'uncertain' && d.id) { uncertainPrintIds.add(String(d.id)); const cur=printedOrders.get(String(d.id)); if (cur && cur.status === 'pending') printedOrders.set(String(d.id), {status:'uncertain', attempts:cur.attempts||1, error:cur.error||'Outcome uncertain.'}); renderOrders(); }
+  };
+}
+window.addEventListener('storage', (e) => {
+  if (e.key === 'printedIds') { try { printedIdsPersist = new Set(JSON.parse(e.newValue||'[]')); } catch(_){} renderOrders(); }
+  if (e.key === 'uncertainPrintIds') { try { uncertainPrintIds = new Set(JSON.parse(e.newValue||'[]')); } catch(_){} renderOrders(); }
+  if (e.key === 'autoPrintedIds') { try { autoPrintedIds = new Set(JSON.parse(e.newValue||'[]')); } catch(_){} }
+});
 
 function authFetch(url, opts={}) {
   return fetch(url, opts).then(r => {
@@ -276,26 +313,39 @@ function soapPrint(xmlBody) {
 }
 
 function initPrinter() {
-  printerConnected = false;
-  updatePrinterStatusUI(false);
-  // probe direct reachability (may be blocked by browser mixed-content/CORS on HTTPS)
+  printerState = 'unknown'; printerStateDetail = '';
+  updatePrinterStatusUI();
+  // Best-effort warmup: a successful SDK connect indicates reachability, but not full readiness.
   tryConnectPrinter().then(ok => {
-    printerConnected = !!ok;
-    updatePrinterStatusUI(printerConnected);
-  }).catch(() => { printerConnected = false; updatePrinterStatusUI(false); });
+    if (ok && printerState === 'unknown') { printerState = 'last_ok'; printerStateDetail = 'Recent connection succeeded'; }
+    updatePrinterStatusUI();
+  }).catch(() => { updatePrinterStatusUI(); });
   return true;
 }
 
-function updatePrinterStatusUI(connected) {
+function setPrinterState(state, detail) {
+  printerState = state || 'unknown';
+  printerStateDetail = detail || '';
+  updatePrinterStatusUI();
+}
+
+function updatePrinterStatusUI() {
+  // States shown only when verifiable from SDK/HTTP events in this session.
+  // "Reachable"/"Ready" are not continuously/independently verified from browser; shown as
+  // "Last print OK" (confirmed) or "Unknown" rather than claiming current readiness.
   const indicator = document.getElementById('printer-status-indicator');
-  if (indicator) {
-    indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
-    indicator.title = connected ? 'Stampante raggiungibile: ' + PRINTER_IP : 'Stampante non raggiungibile: ' + PRINTER_IP;
-  }
-  if (els.printerStatusText) {
-    els.printerStatusText.textContent = connected ? 'Connessa' : 'Non connessa';
-    els.printerStatusText.style.color = connected ? '#2e7d32' : '#c0392b';
-  }
+  const map = {
+    unknown:     { cls: 'disconnected', text: 'Unknown', color: '#8b6f47', title: 'Printer status unknown (no continuous reachability/readiness check possible from browser)' },
+    printing:    { cls: 'connected',    text: 'Printing...', color: '#1565c0', title: 'Print job in progress' },
+    last_ok:     { cls: 'connected',    text: 'Last print OK', color: '#2e7d32', title: 'Last print confirmed by printer (current readiness not continuously verified)' },
+    unreachable: { cls: 'disconnected', text: 'Unreachable', color: '#c0392b', title: 'Printer could not be reached (verified by failed connect/send)' },
+    paper_out:   { cls: 'disconnected', text: 'Paper out', color: '#c0392b', title: 'Printer reported paper out (verified)' },
+    cover_open:  { cls: 'disconnected', text: 'Cover open', color: '#c0392b', title: 'Printer reported cover open (verified)' },
+    uncertain:   { cls: 'disconnected', text: 'Uncertain', color: '#b26a00', title: 'Last print outcome uncertain; check printer before retry' }
+  };
+  const s = map[printerState] || map.unknown;
+  if (indicator) { indicator.className = 'printer-status ' + s.cls; indicator.title = (s.title + (printerStateDetail ? ' — ' + printerStateDetail : '')) + ' (' + PRINTER_IP + ')'; }
+  if (els.printerStatusText) { els.printerStatusText.textContent = s.text; els.printerStatusText.style.color = s.color; }
 }
 
 function withTimeout(promise, ms, label) {
@@ -318,15 +368,22 @@ function getEposPrinter() {
   if (!eps || !eps.ePOSDevice) return Promise.reject(new Error('Epson ePOS SDK non disponibile'));
   _eposConnecting = new Promise((resolve, reject) => {
     let dev, settled = false;
-    const fail = (msg) => { if (settled) return; settled = true; try { dev && dev.disconnect(); } catch(e) {} _eposDev = null; _eposPrinter = null; _eposConnecting = null; reject(new Error(msg)); };
-    const timer = setTimeout(() => fail('Timeout connessione stampante (' + PRINTER_IP + ')'), 8000);
+    const fail = (msg, flags) => {
+      if (settled) return; settled = true;
+      try { dev && dev.disconnect(); } catch(e) {}
+      _eposDev = null; _eposPrinter = null; _eposConnecting = null;
+      const err = (msg && typeof msg === 'object') ? msg : new Error(String(msg));
+      if (flags) Object.assign(err, flags);
+      reject(err);
+    };
+    const timer = setTimeout(() => fail('Timeout connessione stampante (' + PRINTER_IP + ')', { beforeSend: true, printerState: 'unreachable' }), 8000);
     const wrap = (fn) => (...a) => { clearTimeout(timer); return fn(...a); };
     try {
       dev = new eps.ePOSDevice();
       const onConnect = wrap((res) => {
-        if (!(res === 'OK' || res === 'SSL_CONNECT_OK')) return fail('Connessione stampante fallita: ' + res + ' (' + PRINTER_IP + ')');
+        if (!(res === 'OK' || res === 'SSL_CONNECT_OK')) return fail('Connessione stampante fallita: ' + res + ' (' + PRINTER_IP + ')', { beforeSend: true, printerState: 'unreachable' });
         dev.createDevice(PRINTER_DEV_ID, dev.DEVICE_TYPE_PRINTER, { crypto: false, buffer: false }, (p, code) => {
-          if (code !== 'OK' || !p) return fail('Creazione device fallita: ' + code);
+          if (code !== 'OK' || !p) return fail('Creazione device fallita: ' + code, { beforeSend: true, printerState: 'unreachable' });
           p.timeout = 10000;
           _eposDev = dev; _eposPrinter = p; _eposConnecting = null;
           resolve(p);
@@ -337,10 +394,10 @@ function getEposPrinter() {
         dev.connect(PRINTER_IP, 8008, (res2) => {
           if (res2 === 'OK' || res2 === 'SSL_CONNECT_OK') return onConnect(res2);
           clearTimeout(timer);
-          fail('Impossibile connettersi alla stampante ' + PRINTER_IP + ' (porte 80/8008): ' + res + '/' + res2);
+          fail('Impossibile connettersi alla stampante ' + PRINTER_IP + ' (porte 80/8008): ' + res + '/' + res2, { beforeSend: true, printerState: 'unreachable' });
         });
       });
-    } catch(e) { clearTimeout(timer); fail('Eccezione ePOS SDK: ' + (e && e.message || e)); }
+    } catch(e) { clearTimeout(timer); fail('Eccezione ePOS SDK: ' + (e && e.message || e), { beforeSend: true, printerState: 'unreachable' }); }
   });
   return _eposConnecting;
 }
@@ -353,49 +410,100 @@ function tryConnectPrinter() {
 function printViaEposSDK(xml) {
   return getEposPrinter().then(printer => new Promise((resolve, reject) => {
     let settled = false;
-    const fail = (msg) => { if (settled) return; settled = true; resetEposConnection(); reject(new Error(msg)); };
+    const fail = (msg, flags) => {
+      if (settled) return; settled = true; resetEposConnection();
+      const err = (msg && typeof msg === 'object') ? msg : new Error(String(msg));
+      if (flags) Object.assign(err, flags);
+      reject(err);
+    };
     const ok = () => { if (settled) return; settled = true; resolve(true); };
-    const timer = setTimeout(() => fail('Timeout stampa (' + PRINTER_IP + ')'), 10000);
+    // Timeout after send started: response/confirmation lost -> uncertain (no blind retry)
+    const timer = setTimeout(() => fail('Timeout stampa (' + PRINTER_IP + ')', { uncertain: true }), 10000);
     const done = (fn) => (...a) => { clearTimeout(timer); return fn(...a); };
     printer.onreceive = done((resp) => {
       if (resp && resp.success) ok();
-      else fail('Errore stampante: ' + ((resp && (resp.code || resp.status)) || 'risposta non valida'));
+      else {
+        const code = (resp && (resp.code || resp.status)) || 'risposta non valida';
+        const em = 'Errore stampante: ' + code;
+        const e = new Error(em);
+        if (/EPTR_COVER_OPEN|cover/i.test(String(code))) e.printerState = 'cover_open';
+        else if (/EPTR_REC_EMPTY|paper/i.test(String(code))) e.printerState = 'paper_out';
+        fail(e);
+      }
     });
-    printer.onerror = done((e) => fail('Errore ePOS: ' + (e && (e.message || e.status) || 'sconosciuto')));
-    printer.oncoveropen = done(() => fail('Errore stampante: coperchio aperto'));
-    printer.onpaperend = done(() => fail('Errore stampante: carta esaurita'));
+    printer.onerror = done((e) => {
+      const msg = 'Errore ePOS: ' + (e && (e.message || e.status) || 'sconosciuto');
+      const err = new Error(msg);
+      if (/COVER_OPEN/i.test(String(e && (e.status || e.message || e)))) err.printerState = 'cover_open';
+      if (/REC_EMPTY|PAPER/i.test(String(e && (e.status || e.message || e)))) err.printerState = 'paper_out';
+      fail(err);
+    });
+    printer.oncoveropen = done(() => { const e = new Error('Errore stampante: coperchio aperto'); e.printerState = 'cover_open'; fail(e); });
+    printer.onpaperend = done(() => { const e = new Error('Errore stampante: carta esaurita'); e.printerState = 'paper_out'; fail(e); });
     printer.onpapernearend = () => { /* warning only */ };
     try { printer.send(xml); }
-    catch(e) { done(fail)('Invio fallito: ' + (e && e.message || e)); }
+    catch(e) { const err = new Error('Invio fallito: ' + (e && e.message || e)); err.beforeSend = true; done(fail)(err); }
   }));
 }
 
 function printViaHttp(xml) {
   return soapPrint(xml).then(r => {
-    if (!r.ok) throw new Error('Printer HTTP error ' + r.status);
-    return r.text().catch(() => '').then(t => {
+    if (!r.ok) {
+      const e = new Error('Printer HTTP error ' + r.status);
+      e.uncertain = false;
+      throw e;
+    }
+    return r.text().catch((readErr) => {
+      // Response received but body unreadable: outcome uncertain (job may have been accepted/printed).
+      const e = new Error('Printer response unreadable after send');
+      e.uncertain = true;
+      throw e;
+    }).then(t => {
       const body = String(t || '');
       // Require positive confirmation; never mark printed without it.
       if (/success\s*=\s*["']?true["']?|<success>\s*true\s*<\/success>|<ePOSPrint>[\s\S]*?<response[^>]*success\s*=\s*["']?true/i.test(body)) return true;
       if (/code\s*=\s*["']?(?:OK|0|SUCCESS)["']?/i.test(body) && !/success\s*=\s*["']?false|<success>\s*false|error/i.test(body)) return true;
       if (/success\s*=\s*["']?false|<success>\s*false|<error|status\s*=\s*["']?(?:ERR|FAIL)/i.test(body)) {
         const m = body.match(/<status>([^<]+)<\/status>|code\s*=\s*["']?([^"'\s>]+)/i);
-        throw new Error('Printer error: ' + ((m && (m[1] || m[2])) || body.slice(0, 80)));
+        const e = new Error('Printer error: ' + ((m && (m[1] || m[2])) || body.slice(0, 80)));
+        if (/cover|EPTR_COVER_OPEN/i.test(body)) e.printerState = 'cover_open';
+        if (/paper|empty|EPTR_REC_EMPTY/i.test(body)) e.printerState = 'paper_out';
+        throw e;
       }
-      // 2xx but no explicit success confirmation
-      throw new Error('No print confirmation received from printer');
+      // 2xx but no explicit success confirmation: uncertain (printer may have printed).
+      const e = new Error('No print confirmation received from printer');
+      e.uncertain = true;
+      throw e;
     });
+  }).catch(err => {
+    if (err && err.uncertain) throw err;
+    // Network/abort failures after request dispatch can mean request reached printer but response was lost.
+    const msg = String(err && err.message || err || '');
+    if (/AbortError|aborted|timeout|Timeout|NetworkError|Failed to fetch|Load failed/i.test(msg) || (err && err.name === 'AbortError')) {
+      const e = new Error(msg || 'Connection lost during print');
+      e.uncertain = true;
+      throw e;
+    }
+    throw err;
   });
 }
 
+function isUncertainError(err) {
+  if (!err) return false;
+  if (err.beforeSend) return false;
+  if (err.uncertain) return true;
+  const msg = String(err.message || err || '');
+  // Confirmation/response lost after dispatch: printer may have printed.
+  return /No print confirmation|response unreadable|AbortError|aborted|NetworkError|Failed to fetch|Load failed/i.test(msg) || (/Timeout|timeout/i.test(msg) && !/Connessione stampante fallita|Impossibile connettersi|before sending/i.test(msg));
+}
 function friendlyPrintError(err) {
   const msg = String(err && err.message || err || 'Unknown error');
-  if (/paper\s*(end|out)|carta esaurita/i.test(msg)) return 'Printer out of paper. Add paper and retry.';
+  if (/paper\s*(end|out)|carta esaurita|EPTR_REC_EMPTY/i.test(msg)) return 'Printer out of paper. Add paper and retry.';
   if (/paper\s*near/i.test(msg)) return 'Printer paper is low.';
-  if (/cover\s*open|coperchio/i.test(msg)) return 'Printer cover is open. Close it and retry.';
-  if (/Timeout|timeout/i.test(msg)) return 'Printer timed out. Check connection/power and retry.';
+  if (/cover\s*open|coperchio|EPTR_COVER_OPEN/i.test(msg)) return 'Printer cover is open. Close it and retry.';
+  if (isUncertainError(err)) return 'Print outcome uncertain: confirmation was lost. Check the printer before retrying to avoid a duplicate receipt.';
+  if (/Timeout|timeout/i.test(msg)) return 'Printer timed out before sending. Check connection/power and retry.';
   if (/Impossibile connettersi|Connessione stampante fallita|unreachable|not reachable|offline|disconnected/i.test(msg)) return 'Printer cannot be reached at ' + PRINTER_IP + '. Check Wi-Fi/power and retry.';
-  if (/No print confirmation/i.test(msg)) return 'Printer did not confirm printing. Check printer and retry.';
   if (/NetworkError|Failed to fetch|Load failed|TypeError:.*fetch|CORS/i.test(msg)) return 'Cannot reach printer from this browser/network. Check local network access or connection.';
   if (/HTTPS|mixed content|targetAddressSpace|local-network/i.test(msg)) return 'Browser blocked direct access to the local printer. Check local network permission and printer availability.';
   return msg.length > 140 ? msg.slice(0, 137) + '...' : msg;
@@ -446,7 +554,7 @@ function randomTestOrder() {
   const isPickup = Math.random() < 0.5;
   const times = ['ASAP','19:30','20:00','20:30','21:00'];
   return {
-    id: 'test-' + Date.now(),
+    id: 'test-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
     order_number: 'TEST-' + String(Math.floor(1000 + Math.random() * 9000)),
     customer_name: pick(names),
     customer_phone: '3' + String(Math.floor(100000000 + Math.random() * 900000000)),
@@ -465,7 +573,7 @@ function randomTestOrder() {
 
 function testPrinterConnection() {
   const order = randomTestOrder();
-  printOrder(order);
+  printOrder(order, { force: true });
 }
 
 function printOrder(order, opts) {
@@ -474,6 +582,7 @@ function printOrder(order, opts) {
   const key = String(order.id);
   const prev = getPrintInfo(order.id);
   const isAuto = !!opts.auto;
+  const force = !!opts.force;
   if (prev && prev.status === 'pending') {
     showToast('Stampa già in corso: ' + (order.order_number || order.id));
     return Promise.resolve();
@@ -481,22 +590,37 @@ function printOrder(order, opts) {
   if (isAuto && (autoPrintedIds.has(key) || printedIdsPersist.has(key) || (prev && prev.status === 'printed'))) {
     return Promise.resolve();
   }
+  if (prev && prev.status === 'uncertain' && !force) {
+    showToast('Stampa incerta per ' + (order.order_number || order.id) + ': verifica la stampante prima di riprovare.');
+    return Promise.resolve();
+  }
   if (isAuto) { autoPrintedIds.add(key); saveAutoPrintedIds(); }
   const attempts = ((prev && prev.attempts) || 0) + 1;
+  if (force) { uncertainPrintIds.delete(key); saveUncertainPrintIds(); }
   printedOrders.set(key, { status: 'pending', attempts, error: null });
+  setPrinterState('printing', 'Sending ' + (order.order_number || key));
   renderOrders();
   showToast('Stampa in corso: ' + (order.order_number || order.id) + '...');
   return directPrint(order).then(() => {
     printedOrders.set(key, { status: 'printed', attempts, error: null });
-    printedIdsPersist.add(key); savePrintedIds();
-    printerConnected = true; updatePrinterStatusUI(true);
+    markPrintedPersist(key);
+    setPrinterState('last_ok', 'Last confirmed print succeeded');
     showToast('Stampato: ' + (order.order_number || order.id));
     return true;
   }).catch(err => {
     const friendly = friendlyPrintError(err);
-    printedOrders.set(key, { status: 'failed', attempts, error: friendly });
-    printerConnected = false; updatePrinterStatusUI(false);
     console.error('Print error', err);
+    if (isUncertainError(err)) {
+      printedOrders.set(key, { status: 'uncertain', attempts, error: friendly, uncertain: true });
+      markUncertainPersist(key);
+      setPrinterState('uncertain', friendly);
+      showToast('Esito incerto: ' + friendly);
+      return false;
+    }
+    printedOrders.set(key, { status: 'failed', attempts, error: friendly });
+    if (err && err.printerState) setPrinterState(err.printerState, friendly);
+    else if (/cannot be reached|Cannot reach printer/i.test(friendly)) setPrinterState('unreachable', friendly);
+    else setPrinterState('unknown', friendly);
     showToast('Stampa non riuscita: ' + friendly);
     return false;
   }).finally(() => { renderOrders(); });
@@ -519,6 +643,7 @@ function setStatus(id, status, btn) {
   saveStatus(id, status).then(() => {
     o._saving = false;
     showToast('Ordine ' + o.order_number + ' \u2192 ' + status);
+    // Auto-print is client-side; do not claim cross-device atomic locking without backend support.
     const _prevPS = String(prev || '').toLowerCase();
     const _newPS = String(status || '').toLowerCase();
     if (_newPS === 'preparing' && _prevPS !== 'preparing' && autoPrintEnabled) {
@@ -623,11 +748,12 @@ function renderOrders() {
     const pinfo = getPrintInfo(o.id);
     const pstatus = pinfo ? pinfo.status : null;
     let pbadge = '';
-    if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Stampato">\u2705 Stampato</span>';
-    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="' + esc((pinfo && pinfo.error) || 'Stampa fallita') + '">Stampa fallita</span>';
-    else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Stampa in corso">Stampa...</span>';
+    if (pstatus === 'printed') pbadge = '<span class="print-badge printed" title="Confirmed printed">\u2705 Stampato</span>';
+    else if (pstatus === 'failed') pbadge = '<span class="print-badge failed" title="' + esc((pinfo && pinfo.error) || 'Print failed') + '">Stampa fallita</span>';
+    else if (pstatus === 'pending') pbadge = '<span class="print-badge pending" title="Print in progress">Stampa...</span>';
+    else if (pstatus === 'uncertain') pbadge = '<span class="print-badge uncertain" title="' + esc((pinfo && pinfo.error) || 'Outcome uncertain. Check printer before retry.') + '">Esito incerto</span>';
     const printDisabled = pstatus === 'pending';
-    const printLabel = pstatus === 'pending' ? 'Stampa...' : (pstatus === 'failed' ? 'Riprova' : 'Stampa');
+    const printLabel = pstatus === 'pending' ? 'Stampa...' : (pstatus === 'failed' ? 'Riprova' : (pstatus === 'uncertain' ? 'Verifica/Riprova' : 'Stampa'));
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
     if (o._saving) card.classList.add('saving');
     card.innerHTML = `
@@ -753,7 +879,18 @@ els.orderList.addEventListener('click', e => {
   else if (action === 'preparing') setStatus(id, 'preparing', btn);
   else if (action === 'ready') { const oo = orders.find(x => String(x.id) === String(id)); setStatus(id, oo && oo.order_type === 'pickup' ? 'ready' : 'out_for_delivery', btn); }
   else if (action === 'complete') setStatus(id, 'completed', btn);
-  else if (action === 'print') { const o = orders.find(x => String(x.id) === String(id)); if (o) printOrder(o); }
+  else if (action === 'print') {
+    const o = orders.find(x => String(x.id) === String(id));
+    if (!o) return;
+    const pi = getPrintInfo(o.id);
+    if (pi && pi.status === 'uncertain') {
+      const ok = window.confirm('Last print outcome is uncertain (printer may have printed). Check the printer first. Retry printing anyway?');
+      if (!ok) return;
+      printOrder(o, { force: true });
+    } else {
+      printOrder(o);
+    }
+  }
 });
 
 if (els.statusModal) {

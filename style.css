@@ -252,6 +252,7 @@ button:focus-visible, .btn:focus-visible, .filter-tab:focus-visible, .earnings-t
 .print-badge.printed { background: rgba(46,125,50,.12); color: #2e7d32; }
 .print-badge.failed { background: rgba(192,57,43,.12); color: #c0392b; }
 .print-badge.pending { background: rgba(139,111,71,.12); color: #8b6f47; }
+.print-badge.uncertain { background: rgba(178,106,0,.12); color: #b26a00; }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .toast { max-width: 92vw; word-break: break-word; }
 </style>
