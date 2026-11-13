@@ -271,11 +271,45 @@ function fallbackBrowserPrint(order) {
   } catch(e) { return false; }
 }
 
+function randomTestOrder() {
+  const names = ['Mario Rossi','Luca Bianchi','Sara Verdi','Ali Khan','Giulia Neri','Paolo Conti'];
+  const menu = [
+    { name: 'Panino Kebab', price: 6.0 },
+    { name: 'Piadina Kebab', price: 6.5 },
+    { name: 'Kebab Box', price: 8.0 },
+    { name: 'Patatine', price: 3.0 },
+    { name: 'Coca Cola', price: 2.0 },
+    { name: 'Acqua', price: 1.0 }
+  ];
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const count = 1 + Math.floor(Math.random() * 4);
+  const items = Array.from({ length: count }, () => {
+    const m = pick(menu);
+    return { qty: 1 + Math.floor(Math.random() * 3), name: m.name, price: m.price };
+  });
+  const total = items.reduce((s, i) => s + i.qty * i.price, 0);
+  const isPickup = Math.random() < 0.5;
+  const times = ['ASAP','19:30','20:00','20:30','21:00'];
+  return {
+    id: 'test-' + Date.now(),
+    order_number: 'TEST-' + String(Math.floor(1000 + Math.random() * 9000)),
+    customer_name: pick(names),
+    customer_phone: '3' + String(Math.floor(100000000 + Math.random() * 900000000)),
+    order_type: isPickup ? 'pickup' : 'delivery',
+    delivery_timing: isPickup ? null : (Math.random() < 0.5 ? 'later' : 'now'),
+    delivery_time: !isPickup && Math.random() < 0.5 ? pick(times.slice(1)) : null,
+    pickup_time: isPickup ? pick(times) : null,
+    notes: Math.random() < 0.4 ? pick(['Senza cipolla','Extra piccante','Salsa a parte','Ben cotto']) : '',
+    items,
+    total
+  };
+}
+
 function testPrinterConnection() {
-  const xml = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text>Test stampante Forno99&#10;' + new Date().toLocaleString('it-IT') + '&#10;OK&#10;</text><feed line="2"/><cut type="feed"/></epos-print>';
+  const order = randomTestOrder();
   try {
-    sendToPrintAssistant(xml);
-    showToast('Stampa test inviata. Se non parte, installa/apri Epson TM Print Assistant.');
+    sendToPrintAssistant(buildReceiptXML(order));
+    showToast('Stampa test inviata: ' + order.order_number + '. Se non parte, installa/apri Epson TM Print Assistant.');
   } catch(e) {
     showToast('Errore stampa test: ' + e.message);
   }
