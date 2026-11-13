@@ -2,8 +2,8 @@ const SESSION_KEY = 'forno99_session';
 const API = (window.API_BASE||'') + '/api/orders';
 
 // Epson TM-m30III printer configuration (SOAP/ePOS-Print)
-const PRINTER_IP = '192.168.1.8';
-const PRINTER_URL = 'http://192.168.1.8/cgi-bin/epos/service.cgi';
+const PRINTER_IP = '192.168.178.148';
+const PRINTER_URL = 'http://192.168.178.148/cgi-bin/epos/service.cgi';
 const PRINTER_DEV_ID = 'local_printer';
 let printerConnected = false;
 let autoPrintEnabled = true;
@@ -198,20 +198,12 @@ function buildReceiptXML(order) {
   </epos-print>`;
 }
 
-function soapPrint(xmlBody) {
-  const soap = `<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Header>
-    <parameter xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
-      <devid>${PRINTER_DEV_ID}</devid>
-      <timeout>10000</timeout>
-      <printjobid>order-${Date.now()}</printjobid>
-      </s:Header>
-  <s:Body>
-    ${xmlBody}
-  </s:Body>
-</s:Envelope>`;
+function buildSoapEnvelope(xmlBody) {
+  return `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>${xmlBody}</s:Body></s:Envelope>`;
+}
 
+function soapPrint(xmlBody) {
+  const soap = buildSoapEnvelope(xmlBody);
   return fetch(`${PRINTER_URL}?devid=${PRINTER_DEV_ID}&timeout=10000`, {
     method: 'POST',
     headers: {
@@ -238,30 +230,51 @@ function initPrinter() {
 
 function updatePrinterStatusUI(connected) {
   const indicator = document.getElementById('printer-status-indicator');
-  if (!indicator) return;
-  indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
-  indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
+  if (indicator) {
+    indicator.className = connected ? 'printer-status connected' : 'printer-status disconnected';
+    indicator.title = connected ? 'Stampante connessa: ' + PRINTER_IP : 'Stampante non connessa: ' + PRINTER_IP;
+  }
   if (els.printerStatusText) {
     els.printerStatusText.textContent = connected ? 'Connessa' : 'Non connessa';
     els.printerStatusText.style.color = connected ? '#2e7d32' : '#c0392b';
   }
 }
 
+function sendToPrintAssistant(xml) {
+  const envelope = buildSoapEnvelope(xml);
+  const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + encodeURIComponent(envelope);
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { try { document.body.removeChild(a); } catch(e) {} }, 1000);
+}
+
 function testPrinterConnection() {
-  const xml = '<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text>Test stampante Forno99&#10;' + new Date().toLocaleString('it-IT') + '&#10;OK&#10;</text><feed line="2"/><cut type="feed"/></epos-print></s:Body></s:Envelope>';
-  const url = 'tmprintassistant://tmprintassistant.epson.com/print?ver=1&data-type=eposprintxml&data=' + encodeURIComponent(xml);
-  window.location.href = url;
-  showToast('Apertura TM Print Assistant...');
+  const xml = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print"><text>Test stampante Forno99&#10;' + new Date().toLocaleString('it-IT') + '&#10;OK&#10;</text><feed line="2"/><cut type="feed"/></epos-print>';
+  try {
+    sendToPrintAssistant(xml);
+    showToast('Stampa test inviata a TM Print Assistant');
+  } catch(e) {
+    showToast('Errore stampa test: ' + e.message);
+  }
 }
 
 function printOrder(order) {
-  const w = window.open('', '_blank');
-  if (w) {
-    w.document.write('<pre style="font-family:monospace;font-size:12px;">' + buildReceiptXML(order).replace(/<[^>]+>/g, '\n').trim() + '</pre>');
-    w.document.close();
-    w.focus();
-    w.print();
+  if (!order) return;
+  const key = String(order.id);
+  printedOrders.set(key, { status: 'pending', attempts: ((printedOrders.get(key) || {}).attempts || 0) + 1 });
+  renderOrders();
+  try {
+    sendToPrintAssistant(buildReceiptXML(order));
+    printedOrders.set(key, { status: 'printed', attempts: (printedOrders.get(key) || {}).attempts || 1 });
+    showToast('Stampa inviata: ' + (order.order_number || order.id));
+  } catch(e) {
+    printedOrders.set(key, { status: 'failed', attempts: (printedOrders.get(key) || {}).attempts || 1, error: e.message });
+    showToast('Errore stampa: ' + e.message);
   }
+  renderOrders();
 }
 
 function printReceiptEpson(order) {
@@ -584,3 +597,5 @@ const printerSettingsModal = document.getElementById('printer-settings-modal');
 if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => {
   if (e.target === printerSettingsModal) printerSettingsModal.classList.add('hidden');
 });
+const printerTestBtn = document.getElementById('printer-test-btn');
+if (printerTestBtn) printerTestBtn.addEventListener('click', testPrinterConnection);
