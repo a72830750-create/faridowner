@@ -314,36 +314,43 @@ button:focus-visible, .btn:focus-visible, .filter-tab:focus-visible, .earnings-t
 /* ===== Mobile app layout ===== */
 @media (max-width: 640px) {
   html, body { overflow-x: hidden; max-width: 100%; }
-  body { font-size: 16px; -webkit-text-size-adjust: 100%; }
-  .dashboard-body { padding: 10px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  .stat-card { padding: 12px; }
-  .stat-value { font-size: 22px; }
-  .topbar { padding: 8px 10px; gap: 6px; align-items: flex-start; }
+  body { font-size: 15px; -webkit-text-size-adjust: 100%; }
+  .dashboard-body { padding: 8px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .stat-card { padding: 10px; min-width: 0; }
+  .stat-label { font-size: 11px; }
+  .stat-value { font-size: 20px; }
+  .topbar { padding: 8px; gap: 8px; flex-direction: column; align-items: stretch; }
   .topbar-brand { flex-wrap: wrap; gap: 4px 8px; }
-  .logo { font-size: 16px; }
-  .topbar-title { font-size: 12px; }
-  .topbar-actions { width: 100%; gap: 6px; justify-content: flex-start; }
-  .topbar-actions .btn { min-height: 36px; padding: 6px 10px; font-size: 13px; flex: 0 0 auto; }
-  .btn { min-height: 42px; padding: 10px 12px; font-size: 14px; }
-  .btn-sm { min-height: 36px; padding: 6px 10px; font-size: 13px; }
+  .logo { font-size: 15px; }
+  .topbar-title { font-size: 11px; }
+  .topbar-actions { width: 100%; gap: 6px; justify-content: flex-start; flex-wrap: wrap; }
+  .topbar-actions .btn { min-height: 34px; padding: 6px 8px; font-size: 12px; flex: 1 1 auto; }
+  .btn { min-height: 40px; padding: 8px 10px; font-size: 14px; }
+  .btn-sm { min-height: 34px; padding: 6px 8px; font-size: 12px; }
   input, select, textarea { font-size: 16px; max-width: 100%; }
-  .filter-bar { gap: 8px; }
-  .filter-controls { width: 100%; }
-  .filter-controls .form-input, .filter-controls select { flex: 1 1 100%; min-width: 0; }
-  .order-card { margin: 8px 0; border-radius: 12px; padding: 14px; }
-  .order-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .order-actions .btn { flex: 1 1 45%; }
-  .modal-card { width: 94vw; max-width: 94vw; border-radius: 16px; padding: 16px; }
-  .modal-body { max-height: 70vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .filter-tabs, .earnings-tabs { gap: 6px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-  .filter-tab, .earnings-tab { flex: 0 0 auto; }
-  .order-meta { flex-wrap: wrap; gap: 4px; }
-  .order-items li { font-size: 14px; }
-  .orders-layout { flex-direction: column; }
-  .order-list { min-width: 0; width: 100%; }
+  .filter-bar { gap: 8px; flex-direction: column; align-items: stretch; }
+  .filter-tabs { width: 100%; gap: 6px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .filter-tab { flex: 0 0 auto; padding: 8px 10px; font-size: 13px; }
+  .filter-controls { width: 100%; flex-direction: column; align-items: stretch; gap: 6px; }
+  .filter-controls .form-input, .filter-controls select, .filter-search { flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; }
+  .orders-layout { flex-direction: column; gap: 10px; }
+  .order-list { min-width: 0; width: 100%; gap: 10px; }
+  .order-card { margin: 0; border-radius: 12px; padding: 12px; }
+  .order-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .order-number { font-size: 15px; }
+  .order-meta { flex-wrap: wrap; gap: 4px 8px; font-size: 12px; }
+  .order-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .order-actions .btn { flex: 1 1 calc(50% - 6px); min-width: 0; }
+  .order-items li { font-size: 13px; }
+  .earnings-history { padding: 10px; }
+  .earnings-tabs { gap: 6px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .earnings-tab { flex: 0 0 auto; font-size: 12px; }
+  .earnings-body { gap: 12px; }
+  .earnings-value { font-size: 18px; }
   .custom-panel { width: 100%; }
-  .earnings-body { gap: 16px; }
+  .modal-card { width: 96vw; max-width: 96vw; border-radius: 14px; padding: 14px; }
+  .modal-body { max-height: 70vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 }
 @supports (padding: max(0px)) {
   .topbar { padding-top: max(8px, env(safe-area-inset-top)); }

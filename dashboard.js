@@ -113,7 +113,14 @@ function rome(d) { const x = new Date(d.toLocaleString('en-US', { timeZone: 'Eur
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
-function saveStatus(id, status) { const t=sessionStorage.getItem('forno99_token'); return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization':'Bearer '+t }, body: JSON.stringify({ status }) }); }
+function saveStatus(id, status) {
+  const t = sessionStorage.getItem('forno99_token');
+  return authFetch(API + '/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+    body: JSON.stringify({ status })
+  }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; });
+}
 
 function matchesDate(o) {
   const now = rome(new Date());
