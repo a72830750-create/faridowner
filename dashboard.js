@@ -51,9 +51,7 @@ window.addEventListener('storage', (e) => {
   if (e.key === 'autoPrintedIds') { try { autoPrintedIds = new Set(JSON.parse(e.newValue||'[]')); } catch(_){} }
 });
 
-function authFetch(url, opts={}) {
-  return fetch(url, opts);
-}
+function authFetch(url, opts={}) { return fetch(url, opts); }
 
 const els = {
   dashboard: document.getElementById('dashboard'),
@@ -99,23 +97,7 @@ function rome(d) { const x = new Date(d.toLocaleString('en-US', { timeZone: 'Eur
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
 async function loadOrders() { const r = await fetch(API); if (!r.ok) throw new Error('API error'); return r.json(); }
-const ALLOWED_STATUSES = ['new', 'accepted', 'rejected', 'completed', 'preparing', 'ready', 'out_for_delivery'];
-const STATUS_LABELS = { new: 'Nuovo', accepted: 'Accettato', rejected: 'Rifiutato', completed: 'Completato', preparing: 'In preparazione', ready: 'Pronto', out_for_delivery: 'In consegna' };
-const pendingStatus = new Map(); // id -> status
-
-async function saveStatus(id, status) {
-  const r = await authFetch(API + '/' + encodeURIComponent(id), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status })
-  });
-  if (!r.ok) {
-    let msg = 'HTTP ' + r.status;
-    try { const txt = await r.text(); if (txt) msg += ': ' + txt.slice(0, 80); } catch (_) {}
-    throw new Error(msg);
-  }
-  try { return await r.json(); } catch (_) { return { id, status }; }
-}
+function saveStatus(id, status) { return authFetch(API + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); }
 
 function matchesDate(o) {
   const now = rome(new Date());
@@ -244,6 +226,7 @@ function buildReceiptXML(order) {
     return `<text>${l1}&#10;${l2}&#10;</text>`;
   }).join('');
   const total = fmtMoney(order.total != null ? order.total : (order.items || []).reduce((s, i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0));
+  const payment = esc(order.payment_method || order.payment || 'N/A');
   const dt = esc(fmtDateTime(order.created_at));
   const cust = esc(order.customer_name || 'N/A');
   const phone = esc(order.customer_phone || 'N/A');
@@ -269,8 +252,9 @@ function buildReceiptXML(order) {
     items +
     `<text align="center">--------------------------------&#10;</text>` +
     `<text align="right" dw="true">TOTALE: EUR ${esc(total)}&#10;</text>` +
+    `<text>Pagamento: ${payment}&#10;</text>` +
     notes +
-    `<feed line="5"/><cut type="feed"/></epos-print>`;
+    `<feed line="2"/><cut type="feed"/></epos-print>`;
 }
 
 function buildSoapEnvelope(xmlBody) {
@@ -534,6 +518,47 @@ function directPrint(order) {
   }));
 }
 
+function randomTestOrder() {
+  const names = ['Mario Rossi','Luca Bianchi','Sara Verdi','Ali Khan','Giulia Neri','Paolo Conti'];
+  const menu = [
+    { name: 'Panino Kebab', price: 6.0 },
+    { name: 'Piadina Kebab', price: 6.5 },
+    { name: 'Kebab Box', price: 8.0 },
+    { name: 'Patatine', price: 3.0 },
+    { name: 'Coca Cola', price: 2.0 },
+    { name: 'Acqua', price: 1.0 }
+  ];
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const count = 1 + Math.floor(Math.random() * 4);
+  const items = Array.from({ length: count }, () => {
+    const m = pick(menu);
+    return { qty: 1 + Math.floor(Math.random() * 3), name: m.name, price: m.price };
+  });
+  const total = items.reduce((s, i) => s + i.qty * i.price, 0);
+  const isPickup = Math.random() < 0.5;
+  const times = ['ASAP','19:30','20:00','20:30','21:00'];
+  return {
+    id: 'test-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+    order_number: 'TEST-' + String(Math.floor(1000 + Math.random() * 9000)),
+    customer_name: pick(names),
+    customer_phone: '3' + String(Math.floor(100000000 + Math.random() * 900000000)),
+    order_type: isPickup ? 'pickup' : 'delivery',
+    delivery_timing: isPickup ? null : (Math.random() < 0.5 ? 'later' : 'now'),
+    delivery_time: !isPickup && Math.random() < 0.5 ? pick(times.slice(1)) : null,
+    pickup_time: isPickup ? pick(times) : null,
+    delivery_address: isPickup ? null : 'Via Roma ' + (1 + Math.floor(Math.random() * 50)) + ', Pescia',
+    notes: Math.random() < 0.4 ? pick(['Senza cipolla','Extra piccante','Salsa a parte','Ben cotto']) : '',
+    payment_method: pick(['Contanti', 'Carta', 'N/A']),
+    created_at: new Date().toISOString(),
+    items,
+    total
+  };
+}
+
+function testPrinterConnection() {
+  const order = randomTestOrder();
+  printOrder(order, { force: true });
+}
 
 function printOrder(order, opts) {
   if (!order) return Promise.resolve();
@@ -589,40 +614,41 @@ function printReceiptEpson(order) {
   printOrder(order);
 }
 
-function getOrderById(id) { return orders.find(x => String(x.id) === String(id)); }
-
-async function setStatus(id, status, btn) {
-  if (!ALLOWED_STATUSES.includes(status)) { showToast('Stato non valido'); return; }
-  const key = String(id);
-  const o = getOrderById(id);
-  if (!o) { showToast('Ordine non trovato'); return; }
-  if (pendingStatus.has(key)) return;
+function setStatus(id, status, btn) {
+  const o = orders.find(x => String(x.id) === String(id));
+  if (!o || o._saving) return;
+  o._saving = true;
   const prev = o.status;
-  if (prev === status) return;
-  pendingStatus.set(key, status);
   o.status = status;
-  renderStats(); renderOrders(); renderEarnings();
-  if (btn) { btn.disabled = true; }
-  try {
-    const updated = await saveStatus(id, status);
-    pendingStatus.delete(key);
-    const fresh = getOrderById(id);
-    if (fresh) {
-      Object.assign(fresh, updated && typeof updated === 'object' ? updated : {}, { status });
-      delete fresh._saving;
+  renderStats();
+  renderOrders();
+  renderEarnings();
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  saveStatus(id, status).then(() => {
+    o._saving = false;
+    showToast(status === 'completed' ? 'Ordine completato!' : 'Ordine ' + o.order_number + ' \u2192 ' + status);
+    // Auto-print is client-side; do not claim cross-device atomic locking without backend support.
+    const _prevPS = String(prev || '').toLowerCase();
+    const _newPS = String(status || '').toLowerCase();
+    if (_newPS === 'preparing' && _prevPS !== 'preparing' && autoPrintEnabled) {
+      printOrder(o, { auto: true });
     }
-    showToast('Ordine ' + (o.order_number || id) + ' \u2192 ' + (STATUS_LABELS[status] || status));
-    if (status === 'preparing' && String(prev).toLowerCase() !== 'preparing' && autoPrintEnabled) {
-      printOrder(fresh || o, { auto: true });
+    if (currentStatus !== 'all') {
+      currentStatus = status;
+      els.filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      const nt = els.filterTabs.querySelector('.filter-tab[data-status="' + status + '"]');
+      if (nt) nt.classList.add('active');
+      renderOrders();
     }
-  } catch (err) {
-    pendingStatus.delete(key);
-    const fresh = getOrderById(id);
-    if (fresh) { fresh.status = prev; delete fresh._saving; }
-    console.error('setStatus failed', err);
-    showToast('Errore aggiornamento: ' + (err && err.message ? err.message : 'riprova'));
-  }
-  renderStats(); renderOrders(); renderEarnings();
+  }).catch(() => {
+    o._saving = false;
+    o.status = prev;
+    renderStats();
+    renderOrders();
+    renderEarnings();
+    if (btn) { btn.disabled = false; }
+    showToast('Errore aggiornamento');
+  });
 }
 
 function showDashboard() { els.dashboard.classList.remove('hidden'); }
@@ -632,24 +658,22 @@ function loadAndRender() {
   loadOrders().then(o => {
     if (banner) banner.classList.remove('show');
     const seen = new Map();
-    (Array.isArray(o) ? o : []).forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
+    o.forEach(x => { if (!seen.has(x.id)) seen.set(x.id, x); });
     o = Array.from(seen.values());
     const newOnes = o.filter(x => x.status === 'new' && !modalShownIds.has(x.id));
     const modal = document.getElementById('neworder-modal');
     if (newOnes.length && (!modal || modal.classList.contains('hidden'))) {
       const firstNew = newOnes[0];
       modalShownIds.add(firstNew.id);
+      playAlarm();
       showNewOrderModal(firstNew);
     }
     o.forEach(x => knownIds.add(x.id));
-    orders = Array.isArray(o) ? o : [];
+    orders = o;
     renderStats();
     renderOrders();
     renderEarnings();
-  }).catch((err) => {
-    console.error('loadOrders failed', err);
-    if (banner) banner.classList.add('show');
-  });
+  }).catch(() => { if (banner) banner.classList.add('show'); showToast('Errore caricamento ordini'); });
 }
 
 function showNewOrderModal(o) {
@@ -715,13 +739,11 @@ function renderOrders() {
     const printDisabled = pstatus === 'pending';
     const printLabel = pstatus === 'pending' ? 'Stampa...' : (pstatus === 'failed' ? 'Riprova' : (pstatus === 'uncertain' ? 'Verifica/Riprova' : 'Stampa'));
     card.className = 'order-card' + (highlightId && o.id == highlightId ? ' highlight' : '') + (waiting ? ' waiting' : '');
-    const saving = pendingStatus.has(String(o.id));
-    if (saving) card.classList.add('saving');
-    const dis = saving ? 'disabled' : '';
+    if (o._saving) card.classList.add('saving');
     card.innerHTML = `
       <div class="order-head">
         <div class="order-number">${esc(o.order_number)} <span class="order-id">ID: ${o.id}</span></div>
-        <span class="order-status ${statusClass(o.status)}">${esc(STATUS_LABELS[o.status] || o.status)}</span>
+        <span class="order-status ${statusClass(o.status)}">${o.status}</span>
         ${pbadge}
       </div>
       <div class="order-meta">
@@ -738,12 +760,12 @@ function renderOrders() {
       <div class="order-foot">
         <div class="order-total">\u20ac${Number(o.total).toFixed(2)}</div>
         <div class="order-actions">
-          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}" ${dis}>Aggiorna</button>
-          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}" ${printDisabled || saving ? 'disabled' : ''}>${printLabel}</button>
-          ${o.status === 'new' ? `<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}" ${dis}>Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}" ${dis}>Rifiuta</button>` : ''}
-          ${o.status === 'accepted' ? `<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}" ${dis}>In preparazione</button>` : ''}
-          ${o.status === 'preparing' ? `<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" ${dis}>Segna pronto</button>` : ''}
-          ${o.status === 'ready' || o.status === 'out_for_delivery' ? `<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}" ${dis}>${saving ? '...' : 'Completa'}</button>` : ''}
+          <button class="btn btn-ghost btn-sm" data-action="status" data-id="${o.id}">Aggiorna</button>
+          <button class="btn btn-ghost btn-sm" data-action="print" data-id="${o.id}" ${printDisabled ? 'disabled' : ''}>${printLabel}</button>
+          ${o.status === 'new' ? '<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>' : ''}
+          ${o.status === 'accepted' ? '<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>' : ''}
+          ${o.status === 'preparing' ? '<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" onclick="setStatus(\'' + o.id + '\',\'ready\',this)">Segna pronto</button>' : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? '<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>' : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
@@ -853,49 +875,10 @@ setInterval(() => {
 // Expose printer functions globally for inline HTML onclick
 window.initPrinter = initPrinter;
 window.setStatus = setStatus;
+window.testPrinterConnection = testPrinterConnection;
 window.printReceiptEpson = printReceiptEpson;
 window.printOrder = printOrder;
 
-async function refreshAcceptingOrders() {
-  const btn = document.getElementById('toggle-orders-btn');
-  if (!btn) return;
-  try {
-    const r = await authFetch((window.API_BASE || '') + '/api/settings');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    const open = String(d.accepting_orders) !== 'false';
-    btn.textContent = open ? 'Ordini: Aperti' : 'Ordini: Chiusi';
-    btn.dataset.accepting = open ? 'true' : 'false';
-    btn.classList.toggle('btn-danger', !open);
-    btn.classList.toggle('btn-success', open);
-  } catch (e) {
-    btn.textContent = 'Ordini: ?';
-  }
-}
-const toggleOrdersBtn = document.getElementById('toggle-orders-btn');
-if (toggleOrdersBtn) toggleOrdersBtn.addEventListener('click', async () => {
-  if (!confirm('Sei sicuro di voler cambiare lo stato degli ordini?')) return;
-  toggleOrdersBtn.disabled = true;
-  try {
-    const r = await authFetch((window.API_BASE || '') + '/api/settings');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    const next = String(d.accepting_orders) === 'false' ? 'true' : 'false';
-    const pr = await authFetch((window.API_BASE || '') + '/api/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'accepting_orders', value: next })
-    });
-    if (!pr.ok) throw new Error('HTTP ' + pr.status);
-    await refreshAcceptingOrders();
-    showToast(next === 'true' ? 'Ordini aperti' : 'Ordini chiusi');
-  } catch (e) {
-    console.error('toggle orders failed', e);
-    showToast('Errore aggiornamento ordini');
-  } finally {
-    toggleOrdersBtn.disabled = false;
-  }
-});
 
 const earningsTabs = document.getElementById('earnings-tabs');
 if (earningsTabs) earningsTabs.addEventListener('click', e => {
@@ -935,6 +918,8 @@ const printerSettingsModal = document.getElementById('printer-settings-modal');
 if (printerSettingsModal) printerSettingsModal.addEventListener('click', (e) => {
   if (e.target === printerSettingsModal) printerSettingsModal.classList.add('hidden');
 });
+const printerTestBtn = document.getElementById('printer-test-btn');
+if (printerTestBtn) printerTestBtn.addEventListener('click', testPrinterConnection);
 const autoPrintToggle = document.getElementById('auto-print-toggle');
 if (autoPrintToggle) {
   autoPrintToggle.checked = !!autoPrintEnabled;

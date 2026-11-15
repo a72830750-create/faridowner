@@ -17,13 +17,12 @@
             <div class="topbar-brand">
                 <div class="logo">FARID KEBABBARO</div>
                 <div class="topbar-title">Pannello Proprietario</div>
-                <button id="toggle-orders-btn" class="btn btn-ghost btn-sm" title="Apri/chiudi ordini">Ordini: ...</button>
             </div>
             <div class="topbar-actions">
                 <span id="printer-status-indicator" class="printer-status disconnected" title="Stampante"></span>
                 <span id="printer-status-text" style="font-size:12px;color:#c0392b;">Non connessa</span>
                 <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" id="auto-print-toggle" checked> Auto</label>
-
+                <button id="printer-test-btn" class="btn btn-ghost btn-sm" title="Stampa di prova">🖨 Test</button>
                 <button id="refresh-btn" class="btn btn-ghost btn-sm" title="Aggiorna orders now">
                     ↻ Aggiorna
                 </button>
@@ -132,6 +131,7 @@
                 <div class="modal-body">
                     <p id="status-order-info">Order #1234</p>
                     <div class="status-actions">
+                        <button class="btn btn-success" data-status="accepted">Accetta</button>
                         <button class="btn btn-danger" data-status="rejected">Rifiuta</button>
                         <button class="btn btn-primary" data-status="completed">Segna completato</button>
                         <button class="btn btn-ghost" data-status="new">Ripristina</button>
