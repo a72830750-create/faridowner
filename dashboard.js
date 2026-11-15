@@ -765,7 +765,7 @@ function renderOrders() {
           ${o.status === 'new' ? '<button class="btn btn-success btn-sm" data-action="accept" data-id="${o.id}">Accetta</button><button class="btn btn-danger btn-sm" data-action="reject" data-id="${o.id}">Rifiuta</button>' : ''}
           ${o.status === 'accepted' ? '<button class="btn btn-primary btn-sm" data-action="preparing" data-id="${o.id}">In preparazione</button>' : ''}
           ${o.status === 'preparing' ? '<button class="btn btn-primary btn-sm" data-action="ready" data-id="${o.id}" onclick="setStatus(\'' + o.id + '\',\'ready\',this)">Segna pronto</button>' : ''}
-          ${o.status === 'ready' || o.status === 'out_for_delivery' ? '<button class="btn btn-success btn-sm" data-action="complete" data-id="${o.id}">Completa</button>' : ''}
+          ${o.status === 'ready' || o.status === 'out_for_delivery' ? '<button class="btn btn-success btn-sm" data-action="complete" data-id="' + o.id + '" onclick="setStatus(\'' + o.id + '\',\'completed\',this)">Completa</button>' : ''}
         </div>
       </div>`;
     els.orderList.appendChild(card);
