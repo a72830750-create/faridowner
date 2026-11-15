@@ -1,4 +1,3 @@
-const SESSION_KEY = 'forno99_session';
 const API = (window.API_BASE||'') + '/api/orders';
 
 // Epson TM-m30III printer configuration (SOAP/ePOS-Print)
@@ -53,23 +52,11 @@ window.addEventListener('storage', (e) => {
 });
 
 function authFetch(url, opts={}) {
-  return fetch(url, opts).then(r => {
-    if (r.status === 401 && !String(url).includes('/api/login')) {
-      sessionStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('forno99_token');
-      showLogin();
-      if (els.loginError) { els.loginError.textContent = 'Sessione scaduta. Effettua di nuovo il login.'; els.loginError.classList.remove('hidden'); }
-      throw new Error('unauthorized');
-    }
-    return r;
-  });
+  return fetch(url, opts);
 }
 
 const els = {
-  loginScreen: document.getElementById('login-screen'),
   dashboard: document.getElementById('dashboard'),
-  loginForm: document.getElementById('login-form'),
-  loginError: document.getElementById('login-error'),
   orderList: document.getElementById('order-list'),
   emptyState: document.getElementById('empty-state'),
   emptyText: document.getElementById('empty-text'),
@@ -88,7 +75,6 @@ const els = {
   resetBtn: document.getElementById('reset-filters'),
   resultCount: document.getElementById('result-count'),
   refreshBtn: document.getElementById('refresh-btn'),
-  signoutBtn: document.getElementById('signout-btn'),
   printerSettingsBtn: document.getElementById('printer-settings-btn'),
   printerSettingsModal: document.getElementById('printer-settings-modal'),
   printerStatusText: document.getElementById('printer-status-text'),
@@ -112,16 +98,15 @@ function esc(v){ return String(v||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'
 function rome(d) { const x = new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Rome' })); if (x.getHours() < 11) x.setDate(x.getDate() - 1); return x; }
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
-async function loadOrders() { const t = sessionStorage.getItem('forno99_token'); const r = await fetch(API, { headers: { 'Authorization': 'Bearer ' + t } }); if (!r.ok) throw new Error('API error'); return r.json(); }
+async function loadOrders() { const r = await fetch(API); if (!r.ok) throw new Error('API error'); return r.json(); }
 const ALLOWED_STATUSES = ['new', 'accepted', 'rejected', 'completed', 'preparing', 'ready', 'out_for_delivery'];
 const STATUS_LABELS = { new: 'Nuovo', accepted: 'Accettato', rejected: 'Rifiutato', completed: 'Completato', preparing: 'In preparazione', ready: 'Pronto', out_for_delivery: 'In consegna' };
 const pendingStatus = new Map(); // id -> status
 
 async function saveStatus(id, status) {
-  const t = sessionStorage.getItem('forno99_token');
   const r = await authFetch(API + '/' + encodeURIComponent(id), {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status })
   });
   if (!r.ok) {
@@ -640,8 +625,7 @@ async function setStatus(id, status, btn) {
   renderStats(); renderOrders(); renderEarnings();
 }
 
-function showLogin() { els.loginScreen.classList.remove('hidden'); els.dashboard.classList.add('hidden'); }
-function showDashboard() { els.loginScreen.classList.add('hidden'); els.dashboard.classList.remove('hidden'); }
+function showDashboard() { els.dashboard.classList.remove('hidden'); }
 
 function loadAndRender() {
   const banner = document.getElementById('conn-banner');
@@ -658,12 +642,7 @@ function loadAndRender() {
       showNewOrderModal(firstNew);
     }
     o.forEach(x => knownIds.add(x.id));
-    // Merge server data but preserve in-flight optimistic status changes
-    orders = o.map(x => {
-      const key = String(x.id);
-      if (pendingStatus.has(key)) return Object.assign({}, x, { status: pendingStatus.get(key), _saving: true });
-      return x;
-    });
+    orders = Array.isArray(o) ? o : [];
     renderStats();
     renderOrders();
     renderEarnings();
@@ -771,36 +750,6 @@ function renderOrders() {
   });
 }
 
-els.loginForm.addEventListener('submit', e => {
-  e.preventDefault();
-  const user = document.getElementById('login-email').value.trim();
-  const pass = document.getElementById('login-password').value;
-  fetch((window.API_BASE || '') + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) }).then(r => {
-    if (!r.ok) throw new Error('bad');
-    return r.json();
-  }).then(d => {
-    sessionStorage.setItem(SESSION_KEY, '1');
-    sessionStorage.setItem('forno99_token', d.token);
-    els.loginError.classList.add('hidden');
-    showDashboard();
-    loadAndRender();
-    initPrinter();
-    refreshAcceptingOrders();
-  }).catch(() => {
-    els.loginError.textContent = 'Nome utente o password non validi.';
-    els.loginError.classList.remove('hidden');
-  });
-});
-
-els.signoutBtn.addEventListener('click', () => {
-  const t = sessionStorage.getItem('forno99_token');
-  fetch((window.API_BASE || '') + '/api/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } }).finally(() => {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('forno99_token');
-    showLogin();
-  });
-});
-
 els.filterTabs.addEventListener('click', e => {
   const tab = e.target.closest('.filter-tab');
   if (!tab) return;
@@ -907,14 +856,11 @@ window.setStatus = setStatus;
 window.printReceiptEpson = printReceiptEpson;
 window.printOrder = printOrder;
 
-// Toggle accepting orders
 async function refreshAcceptingOrders() {
   const btn = document.getElementById('toggle-orders-btn');
   if (!btn) return;
-  const t = sessionStorage.getItem('forno99_token');
-  if (!t) return;
   try {
-    const r = await authFetch((window.API_BASE || '') + '/api/settings', { headers: { Authorization: 'Bearer ' + t } });
+    const r = await authFetch((window.API_BASE || '') + '/api/settings');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     const open = String(d.accepting_orders) !== 'false';
@@ -928,18 +874,16 @@ async function refreshAcceptingOrders() {
 }
 const toggleOrdersBtn = document.getElementById('toggle-orders-btn');
 if (toggleOrdersBtn) toggleOrdersBtn.addEventListener('click', async () => {
-  const t = sessionStorage.getItem('forno99_token');
-  if (!t) { showToast('Sessione scaduta'); return; }
   if (!confirm('Sei sicuro di voler cambiare lo stato degli ordini?')) return;
   toggleOrdersBtn.disabled = true;
   try {
-    const r = await authFetch((window.API_BASE || '') + '/api/settings', { headers: { Authorization: 'Bearer ' + t } });
+    const r = await authFetch((window.API_BASE || '') + '/api/settings');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     const next = String(d.accepting_orders) === 'false' ? 'true' : 'false';
     const pr = await authFetch((window.API_BASE || '') + '/api/settings', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'accepting_orders', value: next })
     });
     if (!pr.ok) throw new Error('HTTP ' + pr.status);
@@ -966,10 +910,14 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
 const ef = document.getElementById('earn-from'); const et = document.getElementById('earn-to');
 if (ef) ef.addEventListener('change', renderEarnings);
 if (et) et.addEventListener('change', renderEarnings);
-function initAuth() {
-  if (sessionStorage.getItem(SESSION_KEY) === '1') { showDashboard(); loadAndRender(); initPrinter(); refreshAcceptingOrders(); }
-  else showLogin();
+function initApp() {
+  showDashboard();
+  loadAndRender();
+  initPrinter();
+  refreshAcceptingOrders();
+  setInterval(loadAndRender, 5000);
 }
+initApp();
 const noAccept = document.getElementById('no-accept');
 const noReject = document.getElementById('no-reject');
 if (noAccept) noAccept.addEventListener('click', () => { if (selectedNewOrder) { setStatus(selectedNewOrder.id, 'preparing'); document.getElementById('neworder-modal').classList.add('hidden'); } });
