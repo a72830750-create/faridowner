@@ -893,12 +893,18 @@ if (earningsTabs) earningsTabs.addEventListener('click', e => {
 const ef = document.getElementById('earn-from'); const et = document.getElementById('earn-to');
 if (ef) ef.addEventListener('change', renderEarnings);
 if (et) et.addEventListener('change', renderEarnings);
+function refreshAcceptingOrders() {
+  // accepting-orders toggle UI not present; fetch kept best-effort for compatibility
+  try {
+    fetch((window.API_BASE || '') + '/api/settings').catch(() => {});
+  } catch (e) {}
+}
+
 function initApp() {
   showDashboard();
   loadAndRender();
   initPrinter();
   refreshAcceptingOrders();
-  setInterval(loadAndRender, 5000);
 }
 initApp();
 const noAccept = document.getElementById('no-accept');
